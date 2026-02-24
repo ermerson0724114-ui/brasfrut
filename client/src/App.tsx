@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect, useLocation } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,52 +18,55 @@ import AdminProducts from "@/pages/admin/AdminProducts";
 import AdminOrders from "@/pages/admin/AdminOrders";
 import AdminCycles from "@/pages/admin/AdminCycles";
 
-function EmployeeRoutes() {
+function WithEmployeeLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  if (!user || user.isAdmin) return <Redirect to="/login" />;
-  return (
-    <EmployeeLayout>
-      <Switch>
-        <Route path="/" component={DashboardPage} />
-        <Route path="/pedido" component={OrderPage} />
-        <Route path="/historico" component={HistoryPage} />
-        <Route><Redirect to="/" /></Route>
-      </Switch>
-    </EmployeeLayout>
-  );
+  if (!user) return <LoginPage />;
+  return <EmployeeLayout>{children}</EmployeeLayout>;
 }
 
-function AdminRoutes() {
+function WithAdminLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  if (!user || !user.isAdmin) return <Redirect to="/login" />;
-  return (
-    <AdminLayout>
-      <Switch>
-        <Route path="/admin" component={AdminDashboard} />
-        <Route path="/admin/funcionarios" component={AdminEmployees} />
-        <Route path="/admin/grupos" component={AdminGroups} />
-        <Route path="/admin/produtos" component={AdminProducts} />
-        <Route path="/admin/pedidos" component={AdminOrders} />
-        <Route path="/admin/ciclos" component={AdminCycles} />
-        <Route><Redirect to="/admin" /></Route>
-      </Switch>
-    </AdminLayout>
-  );
+  if (!user) return <LoginPage />;
+  if (!user.isAdmin) return <LoginPage />;
+  return <AdminLayout>{children}</AdminLayout>;
 }
 
 function Router() {
-  const { user } = useAuthStore();
-
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
-      <Route path="/admin/:rest*" component={AdminRoutes} />
-      <Route path="/:rest*">
-        {() => {
-          if (!user) return <Redirect to="/login" />;
-          if (user.isAdmin) return <Redirect to="/admin" />;
-          return <EmployeeRoutes />;
-        }}
+
+      <Route path="/dashboard">
+        <WithEmployeeLayout><DashboardPage /></WithEmployeeLayout>
+      </Route>
+      <Route path="/pedido">
+        <WithEmployeeLayout><OrderPage /></WithEmployeeLayout>
+      </Route>
+      <Route path="/historico">
+        <WithEmployeeLayout><HistoryPage /></WithEmployeeLayout>
+      </Route>
+
+      <Route path="/admin/funcionarios">
+        <WithAdminLayout><AdminEmployees /></WithAdminLayout>
+      </Route>
+      <Route path="/admin/grupos">
+        <WithAdminLayout><AdminGroups /></WithAdminLayout>
+      </Route>
+      <Route path="/admin/produtos">
+        <WithAdminLayout><AdminProducts /></WithAdminLayout>
+      </Route>
+      <Route path="/admin/pedidos">
+        <WithAdminLayout><AdminOrders /></WithAdminLayout>
+      </Route>
+      <Route path="/admin/ciclos">
+        <WithAdminLayout><AdminCycles /></WithAdminLayout>
+      </Route>
+      <Route path="/admin">
+        <WithAdminLayout><AdminDashboard /></WithAdminLayout>
+      </Route>
+
+      <Route>
+        <LoginPage />
       </Route>
     </Switch>
   );

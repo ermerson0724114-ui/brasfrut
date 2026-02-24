@@ -39,7 +39,7 @@ export default function LoginPage() {
         if (emp) {
           if (emp.password === form.password) {
             setAuth({ id: parseInt(emp.registrationNumber), name: emp.name, isAdmin: false }, "emp-token");
-            navigate("/");
+            navigate("/dashboard");
             toast({ title: `Bem-vindo, ${emp.name.split(" ")[0]}!` });
           } else if (form.password === "") {
             setNeedsPassword(true);
@@ -63,7 +63,7 @@ export default function LoginPage() {
       const emp = DEMO_EMPLOYEES.find(e => e.registrationNumber === form.registrationNumber);
       if (emp) {
         setAuth({ id: parseInt(emp.registrationNumber), name: emp.name, isAdmin: false }, "emp-token");
-        navigate("/");
+        navigate("/dashboard");
         toast({ title: "Senha criada com sucesso!" });
       }
       setLoading(false);

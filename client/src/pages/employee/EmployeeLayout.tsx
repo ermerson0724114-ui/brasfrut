@@ -3,7 +3,7 @@ import { LayoutDashboard, ShoppingCart, History, LogOut } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 
 const tabs = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/pedido", label: "Pedido", icon: ShoppingCart },
   { path: "/historico", label: "Histórico", icon: History },
 ];
