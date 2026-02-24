@@ -1,30 +1,34 @@
 import { useState } from "react";
 import { Plus, Edit2, Trash2, X, Package, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockProducts, mockGroups } from "@/lib/mockData";
+import { useDataStore } from "@/lib/store";
 
 const emptyForm = { name: "", groupId: "", subgroupId: "", price: "", unit: "un", available: true };
 
 export default function AdminProducts() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<any[]>(mockProducts);
+  const products = useDataStore(s => s.products);
+  const groups = useDataStore(s => s.groups);
+  const addProduct = useDataStore(s => s.addProduct);
+  const updateProduct = useDataStore(s => s.updateProduct);
+  const removeProduct = useDataStore(s => s.removeProduct);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState<any>(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const selectedGroup = mockGroups.find(g => g.id === parseInt(form.groupId));
+  const selectedGroup = groups.find(g => g.id === parseInt(form.groupId));
   const subgroups = selectedGroup?.subgroups || [];
 
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getGroupName = (groupId: number) => mockGroups.find(g => g.id === groupId)?.name || "-";
+  const getGroupName = (groupId: number) => groups.find(g => g.id === groupId)?.name || "-";
   const getSubgroupName = (groupId: number, subgroupId: number) => {
-    const g = mockGroups.find(g => g.id === groupId);
-    return g?.subgroups?.find((s: any) => s.id === subgroupId)?.name || null;
+    const g = groups.find(g => g.id === groupId);
+    return g?.subgroups?.find(s => s.id === subgroupId)?.name || null;
   };
 
   const openEdit = (p: any) => {
@@ -36,13 +40,18 @@ export default function AdminProducts() {
 
   const handleSave = () => {
     if (modal === "add") {
-      const newP = { id: Date.now(), name: form.name, group_id: parseInt(form.groupId), subgroup_id: form.subgroupId ? parseInt(form.subgroupId) : null,
-        price: form.price, unit: form.unit, available: form.available };
-      setProducts(prev => [...prev, newP]);
+      addProduct({
+        id: Date.now(), name: form.name, group_id: parseInt(form.groupId),
+        subgroup_id: form.subgroupId ? parseInt(form.subgroupId) : null,
+        price: form.price, unit: form.unit, available: form.available,
+      });
       toast({ title: "Produto adicionado!" });
-    } else {
-      setProducts(prev => prev.map(p => p.id === editId ? { ...p, name: form.name, group_id: parseInt(form.groupId),
-        subgroup_id: form.subgroupId ? parseInt(form.subgroupId) : null, price: form.price, unit: form.unit, available: form.available } : p));
+    } else if (editId !== null) {
+      updateProduct(editId, {
+        name: form.name, group_id: parseInt(form.groupId),
+        subgroup_id: form.subgroupId ? parseInt(form.subgroupId) : null,
+        price: form.price, unit: form.unit, available: form.available,
+      });
       toast({ title: "Produto atualizado!" });
     }
     setModal(null);
@@ -50,7 +59,7 @@ export default function AdminProducts() {
   };
 
   const handleDelete = () => {
-    setProducts(prev => prev.filter(p => p.id !== deleteId));
+    if (deleteId !== null) removeProduct(deleteId);
     toast({ title: "Produto excluído!" });
     setDeleteId(null);
   };
@@ -132,7 +141,7 @@ export default function AdminProducts() {
                 <select value={form.groupId} onChange={e => setForm({ ...form, groupId: e.target.value, subgroupId: "" })}
                   className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500">
                   <option value="">Selecione...</option>
-                  {mockGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               {subgroups.length > 0 && (
@@ -141,7 +150,7 @@ export default function AdminProducts() {
                   <select value={form.subgroupId} onChange={e => setForm({ ...form, subgroupId: e.target.value })}
                     className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500">
                     <option value="">Sem subgrupo</option>
-                    {subgroups.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {subgroups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               )}

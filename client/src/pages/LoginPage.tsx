@@ -1,19 +1,15 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Eye, EyeOff, Leaf } from "lucide-react";
-import { useAuthStore, useSettingsStore } from "@/lib/store";
+import { Eye, EyeOff, Leaf, ArrowLeft } from "lucide-react";
+import { useAuthStore, useSettingsStore, useDataStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-
-const DEMO_EMPLOYEES = [
-  { registrationNumber: "001234", password: "123456", name: "Ana Paula Silva", isAdmin: false },
-  { registrationNumber: "001235", password: "123456", name: "Carlos Eduardo Mendes", isAdmin: false },
-];
-const ADMIN_CREDS = { registrationNumber: "admin", password: "admin123" };
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
   const { setAuth } = useAuthStore();
-  const { logoUrl, companyName } = useSettingsStore();
+  const { logoUrl, companyName, adminUser, adminPassword, recoveryEmail } = useSettingsStore();
+  const employees = useDataStore(s => s.employees);
+  const updateEmployee = useDataStore(s => s.updateEmployee);
   const { toast } = useToast();
   const [tab, setTab] = useState("employee");
   const [form, setForm] = useState({ registrationNumber: "", password: "" });
@@ -22,13 +18,16 @@ export default function LoginPage() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [recoveredPassword, setRecoveredPassword] = useState<string | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setTimeout(() => {
       if (tab === "admin") {
-        if (form.registrationNumber === ADMIN_CREDS.registrationNumber && form.password === ADMIN_CREDS.password) {
+        if (form.registrationNumber === adminUser && form.password === adminPassword) {
           setAuth({ id: 0, name: "Administrador", isAdmin: true }, "admin-token");
           navigate("/admin");
           toast({ title: "Bem-vindo, Administrador!" });
@@ -36,14 +35,16 @@ export default function LoginPage() {
           toast({ title: "Credenciais inválidas", variant: "destructive" });
         }
       } else {
-        const emp = DEMO_EMPLOYEES.find(e => e.registrationNumber === form.registrationNumber);
+        const emp = employees.find(e => e.registration_number === form.registrationNumber);
         if (emp) {
-          if (emp.password === form.password) {
-            setAuth({ id: parseInt(emp.registrationNumber), name: emp.name, isAdmin: false }, "emp-token");
+          if (emp.is_locked) {
+            toast({ title: "Conta bloqueada. Contate o administrador.", variant: "destructive" });
+          } else if (!emp.password) {
+            setNeedsPassword(true);
+          } else if (emp.password === form.password) {
+            setAuth({ id: emp.id, name: emp.name, isAdmin: false }, "emp-token");
             navigate("/dashboard");
             toast({ title: `Bem-vindo, ${emp.name.split(" ")[0]}!` });
-          } else if (form.password === "") {
-            setNeedsPassword(true);
           } else {
             toast({ title: "Senha incorreta", variant: "destructive" });
           }
@@ -61,14 +62,24 @@ export default function LoginPage() {
     if (newPassword !== confirmPassword) return toast({ title: "Senhas não coincidem", variant: "destructive" });
     setLoading(true);
     setTimeout(() => {
-      const emp = DEMO_EMPLOYEES.find(e => e.registrationNumber === form.registrationNumber);
+      const emp = employees.find(e => e.registration_number === form.registrationNumber);
       if (emp) {
-        setAuth({ id: parseInt(emp.registrationNumber), name: emp.name, isAdmin: false }, "emp-token");
+        updateEmployee(emp.id, { password: newPassword });
+        setAuth({ id: emp.id, name: emp.name, isAdmin: false }, "emp-token");
         navigate("/dashboard");
         toast({ title: "Senha criada com sucesso!" });
       }
       setLoading(false);
     }, 600);
+  };
+
+  const handleForgotPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (forgotEmail.trim().toLowerCase() === recoveryEmail.toLowerCase()) {
+      setRecoveredPassword(adminPassword);
+    } else {
+      toast({ title: "Email não autorizado para recuperação", variant: "destructive" });
+    }
   };
 
   return (
@@ -93,7 +104,51 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-6">
-          {!needsPassword ? (
+          {forgotMode ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => { setForgotMode(false); setRecoveredPassword(null); setForgotEmail(""); }}
+                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"
+                  data-testid="button-back-login"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <h2 className="font-bold text-gray-800">Recuperar senha</h2>
+              </div>
+
+              {recoveredPassword ? (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
+                  <p className="text-sm text-gray-600 mb-2">Sua senha atual é:</p>
+                  <p className="text-2xl font-bold text-green-900 tracking-widest" data-testid="text-recovered-password">{recoveredPassword}</p>
+                  <p className="text-xs text-gray-400 mt-3">Guarde em local seguro e altere após o login.</p>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <p className="text-sm text-gray-500">Digite o email de recuperação cadastrado para visualizar a senha.</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email de recuperação</label>
+                    <input
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Digite o email cadastrado"
+                      data-testid="input-recovery-email"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-green-900 text-white font-bold py-3.5 rounded-2xl transition-all active:scale-[0.98]"
+                    data-testid="button-recover-password"
+                  >
+                    Recuperar senha
+                  </button>
+                </form>
+              )}
+            </div>
+          ) : !needsPassword ? (
             <>
               <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
                 {(["employee", "admin"] as const).map(t => (
@@ -157,6 +212,16 @@ export default function LoginPage() {
                   {loading ? "Entrando..." : "Entrar"}
                 </button>
               </form>
+
+              {tab === "admin" && (
+                <button
+                  onClick={() => setForgotMode(true)}
+                  className="w-full text-center text-sm text-green-700 font-medium mt-4"
+                  data-testid="button-forgot-password"
+                >
+                  Esqueci minha senha
+                </button>
+              )}
             </>
           ) : (
             <form onSubmit={handleCreatePassword} className="space-y-4">

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { CheckCircle, Clock, AlertTriangle, Lock } from "lucide-react";
-import { mockChartData, mockCurrentOrder, mockGroups } from "@/lib/mockData";
+import { useAuthStore, useDataStore } from "@/lib/store";
+import { MONTHS } from "@/lib/mockData";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   draft:     { label: "Em edição",    color: "bg-amber-50 text-amber-700 border border-amber-200",  icon: Clock },
@@ -11,13 +12,18 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
 };
 
 export default function DashboardPage() {
-  const [chartData] = useState(mockChartData);
+  const { user } = useAuthStore();
+  const orders = useDataStore(s => s.orders);
+  const cycles = useDataStore(s => s.cycles);
+  const groups = useDataStore(s => s.groups);
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
 
-  const currentOrder = mockCurrentOrder;
-  const cycle = currentOrder?.cycle;
+  const myOrders = orders.filter(o => o.employee_id === user?.id);
 
-  const orderStatus = cycle?.status === "closed" ? "closed"
+  const activeCycle = cycles.find(c => c.status === "open");
+  const currentOrder = myOrders.find(o => o.cycle_id === activeCycle?.id);
+
+  const orderStatus = activeCycle?.status === "closed" ? "closed"
     : currentOrder?.status === "confirmed" ? "confirmed"
     : currentOrder?.status === "draft" ? "draft"
     : "none";
@@ -26,12 +32,21 @@ export default function DashboardPage() {
   const StatusIcon = statusCfg.icon;
 
   const now = new Date();
-  const endDate = cycle ? new Date(cycle.end_date) : null;
+  const endDate = activeCycle ? new Date(activeCycle.end_date) : null;
   const isPastDeadline = endDate ? now > endDate : false;
 
   const deadlineText = endDate
     ? endDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
     : "Sem ciclo ativo";
+
+  const chartData = MONTHS.map((label, i) => {
+    const monthOrders = myOrders.filter(o => {
+      const cycle = cycles.find(c => c.id === o.cycle_id);
+      return cycle && cycle.month === i + 1;
+    });
+    const total = monthOrders.reduce((s, o) => s + parseFloat(o.total || "0"), 0);
+    return { label, total };
+  });
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -70,27 +85,33 @@ export default function DashboardPage() {
             data-testid="select-group-filter"
           >
             <option value="all">Todos os grupos</option>
-            {mockGroups.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
+            {groups.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
           </select>
         </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip formatter={(v: any) => `R$ ${parseFloat(v).toFixed(2).replace(".", ",")}`} />
-            <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={i === chartData.length - 1 ? "#14532d" : "#86efac"} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {chartData.some(d => d.total > 0) ? (
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip formatter={(v: any) => `R$ ${parseFloat(v).toFixed(2).replace(".", ",")}`} />
+              <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                {chartData.map((_, i) => (
+                  <Cell key={i} fill={i === chartData.length - 1 ? "#14532d" : "#86efac"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="text-center py-10 text-gray-400">
+            <p className="text-sm">Sem dados para exibir</p>
+          </div>
+        )}
       </div>
 
       {currentOrder?.items && currentOrder.items.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-50">
-            <h2 className="font-bold text-gray-800 text-sm">Pedido Atual — Fev/2026</h2>
+            <h2 className="font-bold text-gray-800 text-sm">Pedido Atual</h2>
           </div>
           <div className="divide-y divide-gray-50">
             {currentOrder.items.map(item => (

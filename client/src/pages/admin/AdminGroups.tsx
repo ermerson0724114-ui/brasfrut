@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Plus, Edit2, Trash2, X, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockGroups } from "@/lib/mockData";
+import { useDataStore, type Subgroup } from "@/lib/store";
 
 export default function AdminGroups() {
   const { toast } = useToast();
-  const [groups, setGroups] = useState<any[]>(mockGroups);
+  const groups = useDataStore(s => s.groups);
+  const addGroup = useDataStore(s => s.addGroup);
+  const updateGroup = useDataStore(s => s.updateGroup);
+  const removeGroup = useDataStore(s => s.removeGroup);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [modal, setModal] = useState<string | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
@@ -15,19 +18,21 @@ export default function AdminGroups() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: number } | null>(null);
 
   const openEdit = (g: any) => {
-    setForm({ name: g.name, description: g.description || "", sortOrder: g.sort_order || 0, itemLimit: g.item_limit || "" });
+    setForm({ name: g.name, description: g.description || "", sortOrder: g.sort_order || 0, itemLimit: g.item_limit != null ? String(g.item_limit) : "" });
     setEditId(g.id);
     setModal("edit");
   };
 
   const handleSave = () => {
-    const payload = { ...form, item_limit: form.itemLimit ? parseInt(String(form.itemLimit)) : null, sort_order: form.sortOrder };
+    const itemLimit = form.itemLimit ? parseInt(String(form.itemLimit)) : null;
     if (modal === "add") {
-      const newG = { id: Date.now(), name: payload.name, description: payload.description, item_limit: payload.item_limit, sort_order: payload.sort_order, subgroups: [] };
-      setGroups(prev => [...prev, newG]);
+      addGroup({
+        id: Date.now(), name: form.name, description: form.description,
+        item_limit: itemLimit, sort_order: form.sortOrder, subgroups: [],
+      });
       toast({ title: "Grupo adicionado!" });
-    } else {
-      setGroups(prev => prev.map(g => g.id === editId ? { ...g, ...payload } : g));
+    } else if (editId !== null) {
+      updateGroup(editId, { name: form.name, description: form.description, item_limit: itemLimit, sort_order: form.sortOrder });
       toast({ title: "Grupo atualizado!" });
     }
     setModal(null);
@@ -35,13 +40,15 @@ export default function AdminGroups() {
 
   const handleSaveSub = () => {
     if (!subModal) return;
-    const payload = { name: subForm.name, item_limit: parseInt(subForm.itemLimit) };
+    const group = groups.find(g => g.id === subModal.groupId);
+    if (!group) return;
+    const payload: Subgroup = { id: subModal.id || Date.now(), name: subForm.name, item_limit: parseInt(subForm.itemLimit) || null };
     if (subModal.id) {
-      setGroups(prev => prev.map(g => g.id === subModal.groupId ? { ...g, subgroups: g.subgroups.map((s: any) => s.id === subModal.id ? { ...s, ...payload } : s) } : g));
+      const newSubs = group.subgroups.map(s => s.id === subModal.id ? payload : s);
+      updateGroup(group.id, { subgroups: newSubs });
       toast({ title: "Subgrupo atualizado!" });
     } else {
-      const newSub = { id: Date.now(), ...payload };
-      setGroups(prev => prev.map(g => g.id === subModal.groupId ? { ...g, subgroups: [...g.subgroups, newSub] } : g));
+      updateGroup(group.id, { subgroups: [...group.subgroups, payload] });
       toast({ title: "Subgrupo adicionado!" });
     }
     setSubModal(null);
@@ -50,9 +57,12 @@ export default function AdminGroups() {
   const handleDelete = () => {
     if (!deleteTarget) return;
     if (deleteTarget.type === "group") {
-      setGroups(prev => prev.filter(g => g.id !== deleteTarget.id));
+      removeGroup(deleteTarget.id);
     } else {
-      setGroups(prev => prev.map(g => ({ ...g, subgroups: g.subgroups.filter((s: any) => s.id !== deleteTarget.id) })));
+      const group = groups.find(g => g.subgroups.some(s => s.id === deleteTarget.id));
+      if (group) {
+        updateGroup(group.id, { subgroups: group.subgroups.filter(s => s.id !== deleteTarget.id) });
+      }
     }
     toast({ title: "Excluído com sucesso!" });
     setDeleteTarget(null);
@@ -80,7 +90,12 @@ export default function AdminGroups() {
       </div>
 
       <div className="px-4 py-3 space-y-2 pb-24">
-        {groups.map(g => (
+        {groups.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <Layers size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Nenhum grupo cadastrado</p>
+          </div>
+        ) : groups.map(g => (
           <div key={g.id} className="bg-white rounded-2xl shadow-sm overflow-hidden" data-testid={`card-group-${g.id}`}>
             <div className="flex items-center px-4 py-3 gap-3">
               <button className="flex-1 text-left" onClick={() => setExpanded(expanded === g.id ? null : g.id)}>
@@ -106,14 +121,14 @@ export default function AdminGroups() {
             </div>
             {expanded === g.id && g.subgroups?.length > 0 && (
               <div className="border-t border-gray-50 divide-y divide-gray-50">
-                {g.subgroups.map((sub: any) => (
+                {g.subgroups.map((sub) => (
                   <div key={sub.id} className="flex items-center px-4 py-2.5 gap-3">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-700">{sub.name}</p>
-                      <p className="text-xs text-gray-500">Limite: {sub.item_limit} itens</p>
+                      <p className="text-xs text-gray-500">Limite: {sub.item_limit ?? "—"} itens</p>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => { setSubModal({ groupId: g.id, id: sub.id }); setSubForm({ name: sub.name, itemLimit: String(sub.item_limit) }); }}
+                      <button onClick={() => { setSubModal({ groupId: g.id, id: sub.id }); setSubForm({ name: sub.name, itemLimit: String(sub.item_limit || "") }); }}
                         className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-green-700"><Edit2 size={12} /></button>
                       <button onClick={() => setDeleteTarget({ type: "subgroup", id: sub.id })}
                         className="w-7 h-7 bg-red-50 rounded-lg flex items-center justify-center text-red-500"><Trash2 size={12} /></button>

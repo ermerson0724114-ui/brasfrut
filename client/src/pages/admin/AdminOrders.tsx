@@ -1,29 +1,38 @@
 import { useState } from "react";
 import { Search, ChevronDown, ShoppingBag, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockAdminOrders, mockCycles, mockGroups, mockProducts, MONTHS_FULL } from "@/lib/mockData";
+import { useDataStore } from "@/lib/store";
+import { MONTHS_FULL } from "@/lib/mockData";
 
 const STATUS_LABELS: Record<string, string> = { draft: "Em edição", confirmed: "Confirmado", closed: "Fechado" };
 
 export default function AdminOrders() {
   const { toast } = useToast();
-  const [orders] = useState<any[]>(mockAdminOrders);
-  const [selectedCycle, setSelectedCycle] = useState<any>(mockCycles[0]);
+  const orders = useDataStore(s => s.orders);
+  const cycles = useDataStore(s => s.cycles);
+  const groups = useDataStore(s => s.groups);
+  const products = useDataStore(s => s.products);
+  const updateOrder = useDataStore(s => s.updateOrder);
+
+  const [selectedCycleId, setSelectedCycleId] = useState<number | null>(cycles[0]?.id ?? null);
   const [search, setSearch] = useState("");
   const [editModal, setEditModal] = useState<any>(null);
   const [cart, setCart] = useState<Record<number, number>>({});
-  const [selectedGroup, setSelectedGroup] = useState<number>(mockGroups[0].id);
+  const [selectedGroup, setSelectedGroup] = useState<number>(groups[0]?.id ?? 0);
   const [saving, setSaving] = useState(false);
+
+  const selectedCycle = cycles.find(c => c.id === selectedCycleId);
+  const isClosed = selectedCycle?.status === "closed";
+
+  const cycleOrders = orders.filter(o => o.cycle_id === selectedCycleId);
 
   const openEdit = (order: any) => {
     const cartObj: Record<number, number> = {};
-    order.items?.forEach((i: any, idx: number) => { cartObj[idx + 1] = 1; });
-    setCart({});
+    order.items?.forEach((i: any) => { cartObj[i.product_id] = i.quantity; });
+    setCart(cartObj);
     setEditModal(order);
-    setSelectedGroup(mockGroups[0].id);
+    if (groups.length > 0) setSelectedGroup(groups[0].id);
   };
-
-  const isClosed = selectedCycle?.status === "closed";
 
   const setQty = (productId: number, delta: number) => {
     setCart(prev => {
@@ -35,22 +44,39 @@ export default function AdminOrders() {
   };
 
   const handleSaveEdit = () => {
+    if (!editModal) return;
     setSaving(true);
+    const items = Object.entries(cart).map(([pid, qty]) => {
+      const p = products.find(pr => pr.id === parseInt(pid));
+      const g = groups.find(gr => gr.id === p?.group_id);
+      const sub = g?.subgroups.find(s => s.id === p?.subgroup_id);
+      return {
+        id: Date.now() + Math.random(),
+        product_id: parseInt(pid),
+        quantity: qty,
+        product_name_snapshot: p?.name || "",
+        group_name_snapshot: g?.name || "",
+        subgroup_name_snapshot: sub?.name || null,
+        unit_price: p?.price || "0",
+      };
+    });
+    const total = items.reduce((s, i) => s + parseFloat(i.unit_price) * i.quantity, 0);
+    updateOrder(editModal.id, { items, total: total.toFixed(2) });
     setTimeout(() => {
       setSaving(false);
       setEditModal(null);
       toast({ title: "Pedido atualizado!" });
-    }, 600);
+    }, 400);
   };
 
-  const filtered = orders.filter(o =>
-    o.employee?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    o.employee?.registration_number?.includes(search)
+  const filtered = cycleOrders.filter(o =>
+    o.employee_name?.toLowerCase().includes(search.toLowerCase()) ||
+    o.employee_registration?.includes(search)
   );
 
-  const groupProducts = mockProducts.filter(p => p.group_id === selectedGroup);
+  const groupProducts = products.filter(p => p.group_id === selectedGroup && p.available);
   const totalValue = Object.entries(cart).reduce((s, [id, qty]) => {
-    const p = mockProducts.find(p => p.id === parseInt(id));
+    const p = products.find(p => p.id === parseInt(id));
     return s + (p ? parseFloat(p.price) * qty : 0);
   }, 0);
 
@@ -64,22 +90,24 @@ export default function AdminOrders() {
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-gray-800">Pedidos</h2>
-              <p className="text-gray-500 text-xs">{orders.length} pedido(s)</p>
+              <p className="text-gray-500 text-xs">{cycleOrders.length} pedido(s)</p>
             </div>
           </div>
-          <div className="relative">
-            <select
-              value={selectedCycle?.id || ""}
-              onChange={e => setSelectedCycle(mockCycles.find(c => c.id === parseInt(e.target.value)))}
-              className="appearance-none bg-gray-100 text-gray-800 text-xs rounded-xl px-3 py-2 pr-7 outline-none"
-              data-testid="select-cycle"
-            >
-              {mockCycles.map(c => (
-                <option key={c.id} value={c.id}>{MONTHS_FULL[c.month - 1]}/{c.year}</option>
-              ))}
-            </select>
-            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          </div>
+          {cycles.length > 0 && (
+            <div className="relative">
+              <select
+                value={selectedCycleId ?? ""}
+                onChange={e => setSelectedCycleId(parseInt(e.target.value))}
+                className="appearance-none bg-gray-100 text-gray-800 text-xs rounded-xl px-3 py-2 pr-7 outline-none"
+                data-testid="select-cycle"
+              >
+                {cycles.map(c => (
+                  <option key={c.id} value={c.id}>{MONTHS_FULL[c.month - 1]}/{c.year}</option>
+                ))}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          )}
         </div>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -103,8 +131,8 @@ export default function AdminOrders() {
           <div key={order.id} className="bg-white rounded-2xl p-4 shadow-sm" data-testid={`card-admin-order-${order.id}`}>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="font-semibold text-gray-800 text-sm">{order.employee?.name}</p>
-                <p className="text-xs text-gray-500">{order.employee?.registration_number} · {order.items?.length} item(s)</p>
+                <p className="font-semibold text-gray-800 text-sm">{order.employee_name}</p>
+                <p className="text-xs text-gray-500">{order.employee_registration} · {order.items?.length} item(s)</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={"text-xs font-bold px-2 py-0.5 rounded-full " +
@@ -133,7 +161,7 @@ export default function AdminOrders() {
           <div className="w-full max-w-2xl bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "92vh" }}>
             <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
               <div>
-                <h2 className="font-extrabold text-lg">{editModal.employee?.name}</h2>
+                <h2 className="font-extrabold text-lg">{editModal.employee_name}</h2>
                 <p className="text-xs text-gray-500">{isClosed ? "Somente leitura" : "Editar pedido"}</p>
               </div>
               <button onClick={() => setEditModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
@@ -141,19 +169,21 @@ export default function AdminOrders() {
               </button>
             </div>
 
-            <div className="px-4 flex gap-2 overflow-x-auto pb-2 flex-shrink-0">
-              {mockGroups.map(g => (
-                <button
-                  key={g.id}
-                  onClick={() => setSelectedGroup(g.id)}
-                  className={"flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold " +
-                    (selectedGroup === g.id ? "bg-green-900 text-white" : "bg-gray-100 text-gray-600")}
-                  data-testid={`tab-order-group-${g.id}`}
-                >
-                  {g.name}
-                </button>
-              ))}
-            </div>
+            {groups.length > 0 && (
+              <div className="px-4 flex gap-2 overflow-x-auto pb-2 flex-shrink-0">
+                {groups.map(g => (
+                  <button
+                    key={g.id}
+                    onClick={() => setSelectedGroup(g.id)}
+                    className={"flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold " +
+                      (selectedGroup === g.id ? "bg-green-900 text-white" : "bg-gray-100 text-gray-600")}
+                    data-testid={`tab-order-group-${g.id}`}
+                  >
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="overflow-y-auto flex-1 px-4 space-y-1 pb-2">
               {groupProducts.map(product => {

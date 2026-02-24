@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { Plus, Edit2, X, CalendarClock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockCycles, MONTHS_FULL } from "@/lib/mockData";
+import { useDataStore } from "@/lib/store";
+import { MONTHS_FULL } from "@/lib/mockData";
 
 const STATUS_LABELS: Record<string, string> = { open: "Aberto", closed: "Fechado" };
 const emptyForm = { month: "", year: "", startDate: "", endDate: "", status: "open" };
 
 export default function AdminCycles() {
   const { toast } = useToast();
-  const [cycles, setCycles] = useState<any[]>(mockCycles);
+  const cycles = useDataStore(s => s.cycles);
+  const addCycle = useDataStore(s => s.addCycle);
+  const updateCycle = useDataStore(s => s.updateCycle);
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState<any>(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
@@ -27,13 +30,16 @@ export default function AdminCycles() {
 
   const handleSave = () => {
     if (modal === "add") {
-      const newC = { id: Date.now(), month: parseInt(String(form.month)), year: parseInt(String(form.year)),
-        start_date: form.startDate, end_date: form.endDate, status: form.status };
-      setCycles(prev => [newC, ...prev]);
+      addCycle({
+        id: Date.now(), month: parseInt(String(form.month)), year: parseInt(String(form.year)),
+        start_date: form.startDate, end_date: form.endDate, status: form.status,
+      });
       toast({ title: "Ciclo adicionado!" });
-    } else {
-      setCycles(prev => prev.map(c => c.id === editId ? { ...c, month: parseInt(String(form.month)), year: parseInt(String(form.year)),
-        start_date: form.startDate, end_date: form.endDate, status: form.status } : c));
+    } else if (editId !== null) {
+      updateCycle(editId, {
+        month: parseInt(String(form.month)), year: parseInt(String(form.year)),
+        start_date: form.startDate, end_date: form.endDate, status: form.status,
+      });
       toast({ title: "Ciclo atualizado!" });
     }
     setModal(null);

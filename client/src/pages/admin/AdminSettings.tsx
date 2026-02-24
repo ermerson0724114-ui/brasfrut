@@ -1,32 +1,31 @@
 import { useState, useRef } from "react";
-import { Settings, Upload, Trash2, Leaf, Image } from "lucide-react";
+import { Settings, Upload, Trash2, Leaf, Image, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSettingsStore } from "@/lib/store";
 
 export default function AdminSettings() {
   const { toast } = useToast();
-  const { logoUrl, companyName, setLogoUrl, setCompanyName } = useSettingsStore();
+  const { logoUrl, companyName, adminPassword, setLogoUrl, setCompanyName, setAdminPassword } = useSettingsStore();
   const [nameInput, setNameInput] = useState(companyName);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
       toast({ title: "Selecione uma imagem válida", variant: "destructive" });
       return;
     }
-
     if (file.size > 2 * 1024 * 1024) {
       toast({ title: "Imagem muito grande (máx. 2MB)", variant: "destructive" });
       return;
     }
-
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setLogoUrl(dataUrl);
+      setLogoUrl(reader.result as string);
       toast({ title: "Logo atualizada!" });
     };
     reader.readAsDataURL(file);
@@ -47,6 +46,27 @@ export default function AdminSettings() {
     toast({ title: "Nome atualizado!" });
   };
 
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentPw !== adminPassword) {
+      toast({ title: "Senha atual incorreta", variant: "destructive" });
+      return;
+    }
+    if (newPw.length < 6) {
+      toast({ title: "Nova senha: mínimo 6 caracteres", variant: "destructive" });
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast({ title: "Senhas não coincidem", variant: "destructive" });
+      return;
+    }
+    setAdminPassword(newPw);
+    setCurrentPw("");
+    setNewPw("");
+    setConfirmPw("");
+    toast({ title: "Senha alterada com sucesso!" });
+  };
+
   return (
     <div className="bg-gray-50">
       <div className="px-4 pt-4 pb-2">
@@ -64,10 +84,62 @@ export default function AdminSettings() {
       <div className="px-4 py-4 space-y-4 pb-24">
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
+            <Lock size={18} className="text-green-700" />
+            <h3 className="font-bold text-gray-800">Alterar senha do administrador</h3>
+          </div>
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Senha atual</label>
+              <input
+                type="password"
+                required
+                value={currentPw}
+                onChange={e => setCurrentPw(e.target.value)}
+                className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Digite a senha atual"
+                data-testid="input-current-password"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nova senha</label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Mínimo 6 caracteres"
+                data-testid="input-settings-new-password"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Confirmar nova senha</label>
+              <input
+                type="password"
+                required
+                value={confirmPw}
+                onChange={e => setConfirmPw(e.target.value)}
+                className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Repita a nova senha"
+                data-testid="input-settings-confirm-password"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
+              data-testid="button-change-admin-password"
+            >
+              Alterar senha
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
             <Image size={18} className="text-green-700" />
             <h3 className="font-bold text-gray-800">Logo da tela de login</h3>
           </div>
-
           <div className="flex flex-col items-center gap-4">
             <div className="w-24 h-24 rounded-3xl bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
               {logoUrl ? (
@@ -76,15 +148,8 @@ export default function AdminSettings() {
                 <Leaf size={36} className="text-gray-300" />
               )}
             </div>
-
             <div className="flex gap-2 w-full">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               <button
                 onClick={() => fileRef.current?.click()}
                 className="flex-1 py-3 bg-green-900 text-white rounded-2xl font-semibold flex items-center justify-center gap-2 text-sm"

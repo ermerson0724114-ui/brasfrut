@@ -1,34 +1,56 @@
-import { useState } from "react";
-import { Plus, Minus, ShoppingCart, CheckCircle, AlertTriangle, Leaf } from "lucide-react";
-import { useAuthStore } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { Plus, Minus, ShoppingCart, CheckCircle, Leaf } from "lucide-react";
+import { useAuthStore, useDataStore, type Order, type OrderItem } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { mockGroups, mockProducts } from "@/lib/mockData";
 
 export default function OrderPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const groups = useDataStore(s => s.groups);
+  const products = useDataStore(s => s.products);
+  const orders = useDataStore(s => s.orders);
+  const cycles = useDataStore(s => s.cycles);
+  const addOrder = useDataStore(s => s.addOrder);
+  const updateOrder = useDataStore(s => s.updateOrder);
+
   const [cart, setCart] = useState<Record<number, number>>({});
-  const [selectedGroup, setSelectedGroup] = useState<number>(mockGroups[0].id);
+  const [selectedGroup, setSelectedGroup] = useState<number>(0);
   const [submitted, setSubmitted] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [showTerm, setShowTerm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const cycle = { status: "open", end_date: "2026-02-28T23:59:59" };
-  const isClosed = false;
+  const activeCycle = cycles.find(c => c.status === "open");
+  const isClosed = !activeCycle || (activeCycle && new Date() > new Date(activeCycle.end_date));
+  const existingOrder = orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle?.id);
+
+  useEffect(() => {
+    if (groups.length > 0 && selectedGroup === 0) setSelectedGroup(groups[0].id);
+  }, [groups, selectedGroup]);
+
+  useEffect(() => {
+    if (existingOrder) {
+      const cartObj: Record<number, number> = {};
+      existingOrder.items.forEach(i => { cartObj[i.product_id] = i.quantity; });
+      setCart(cartObj);
+      setSubmitted(existingOrder.status === "confirmed");
+    }
+  }, [existingOrder?.id]);
+
+  const availableProducts = products.filter(p => p.available);
 
   const getGroupTotal = (groupId: number) =>
-    mockProducts.filter(p => p.group_id === groupId).reduce((s, p) => s + (cart[p.id] || 0), 0);
+    availableProducts.filter(p => p.group_id === groupId).reduce((s, p) => s + (cart[p.id] || 0), 0);
 
   const getSubgroupTotal = (subgroupId: number) =>
-    mockProducts.filter(p => p.subgroup_id === subgroupId).reduce((s, p) => s + (cart[p.id] || 0), 0);
+    availableProducts.filter(p => p.subgroup_id === subgroupId).reduce((s, p) => s + (cart[p.id] || 0), 0);
 
   const canAdd = (product: any) => {
-    const group = mockGroups.find(g => g.id === product.group_id);
+    const group = groups.find(g => g.id === product.group_id);
     if (!group) return false;
     if (group.subgroups.length > 0 && product.subgroup_id) {
-      const sub = group.subgroups.find((s: any) => s.id === product.subgroup_id);
-      if (!sub) return true;
+      const sub = group.subgroups.find(s => s.id === product.subgroup_id);
+      if (!sub || !sub.item_limit) return true;
       return getSubgroupTotal(product.subgroup_id) < sub.item_limit;
     }
     if (group.item_limit !== null) {
@@ -48,15 +70,49 @@ export default function OrderPage() {
 
   const totalItems = Object.values(cart).reduce((s, q) => s + q, 0);
   const totalValue = Object.entries(cart).reduce((s, [id, qty]) => {
-    const p = mockProducts.find(p => p.id === parseInt(id));
+    const p = availableProducts.find(p => p.id === parseInt(id));
     return s + (p ? parseFloat(p.price) * qty : 0);
   }, 0);
+
+  const buildOrderItems = (): OrderItem[] => {
+    return Object.entries(cart).map(([pid, qty]) => {
+      const p = products.find(pr => pr.id === parseInt(pid));
+      const g = groups.find(gr => gr.id === p?.group_id);
+      const sub = g?.subgroups.find(s => s.id === p?.subgroup_id);
+      return {
+        id: Date.now() + Math.random(),
+        product_id: parseInt(pid),
+        quantity: qty,
+        product_name_snapshot: p?.name || "",
+        group_name_snapshot: g?.name || "",
+        subgroup_name_snapshot: sub?.name || null,
+        unit_price: p?.price || "0",
+      };
+    });
+  };
 
   const handleSubmit = () => {
     if (!agreed) return toast({ title: "Aceite o termo para confirmar", variant: "destructive" });
     if (totalItems === 0) return toast({ title: "Adicione pelo menos um produto", variant: "destructive" });
+    if (!activeCycle || !user) return;
     setSubmitting(true);
     setTimeout(() => {
+      const items = buildOrderItems();
+      if (existingOrder) {
+        updateOrder(existingOrder.id, { items, total: totalValue.toFixed(2), status: "confirmed" });
+      } else {
+        const newOrder: Order = {
+          id: Date.now(),
+          employee_id: user.id,
+          employee_name: user.name,
+          employee_registration: "",
+          status: "confirmed",
+          total: totalValue.toFixed(2),
+          cycle_id: activeCycle.id,
+          items,
+        };
+        addOrder(newOrder);
+      }
       setSubmitted(true);
       setShowTerm(false);
       setSubmitting(false);
@@ -68,13 +124,26 @@ export default function OrderPage() {
     setCart({});
     setSubmitted(false);
     setAgreed(false);
+    if (existingOrder) {
+      updateOrder(existingOrder.id, { items: [], total: "0.00", status: "draft" });
+    }
     toast({ title: "Pedido excluído" });
   };
 
-  const selectedGroupData = mockGroups.find(g => g.id === selectedGroup);
-  const groupProducts = mockProducts.filter(p => p.group_id === selectedGroup);
+  const selectedGroupData = groups.find(g => g.id === selectedGroup);
+  const groupProducts = availableProducts.filter(p => p.group_id === selectedGroup);
   const groupLimit = selectedGroupData?.item_limit;
   const groupTotal = getGroupTotal(selectedGroup);
+
+  if (groups.length === 0) {
+    return (
+      <div className="text-center py-20 px-4">
+        <Leaf size={40} className="mx-auto mb-3 text-gray-300" />
+        <p className="text-gray-400 font-medium">Nenhum grupo/produto cadastrado ainda.</p>
+        <p className="text-gray-400 text-sm mt-1">Aguarde o administrador configurar os produtos.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-36">
@@ -89,7 +158,7 @@ export default function OrderPage() {
       )}
 
       <div className="px-4 pt-4 flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-        {mockGroups.map(g => (
+        {groups.map(g => (
           <button
             key={g.id}
             onClick={() => setSelectedGroup(g.id)}
@@ -121,7 +190,7 @@ export default function OrderPage() {
 
       <div className="px-4 pt-3 space-y-2">
         {selectedGroupData && selectedGroupData.subgroups.length > 0 ? (
-          selectedGroupData.subgroups.map((sub: any) => {
+          selectedGroupData.subgroups.map((sub) => {
             const subProducts = groupProducts.filter(p => p.subgroup_id === sub.id);
             const subTotal = getSubgroupTotal(sub.id);
             return (
@@ -129,10 +198,12 @@ export default function OrderPage() {
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
                   <div className="flex justify-between items-center">
                     <p className="font-bold text-sm text-gray-700">{sub.name}</p>
-                    <span className={"text-xs font-bold px-2 py-0.5 rounded-full " +
-                      (subTotal >= sub.item_limit ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700")}>
-                      {subTotal}/{sub.item_limit}
-                    </span>
+                    {sub.item_limit && (
+                      <span className={"text-xs font-bold px-2 py-0.5 rounded-full " +
+                        (subTotal >= sub.item_limit ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700")}>
+                        {subTotal}/{sub.item_limit}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {subProducts.map(product => (
@@ -151,7 +222,11 @@ export default function OrderPage() {
           })
         ) : (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {groupProducts.map(product => (
+            {groupProducts.length === 0 ? (
+              <div className="text-center py-10 text-gray-400">
+                <p className="text-sm">Nenhum produto neste grupo</p>
+              </div>
+            ) : groupProducts.map(product => (
               <ProductRow
                 key={product.id}
                 product={product}

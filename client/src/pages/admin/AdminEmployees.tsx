@@ -1,13 +1,16 @@
 import { useState, useRef } from "react";
 import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockEmployees } from "@/lib/mockData";
+import { useDataStore } from "@/lib/store";
 
 const emptyForm = { name: "", registrationNumber: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "" };
 
 export default function AdminEmployees() {
   const { toast } = useToast();
-  const [employees, setEmployees] = useState<any[]>(mockEmployees);
+  const employees = useDataStore(s => s.employees);
+  const addEmployee = useDataStore(s => s.addEmployee);
+  const updateEmployee = useDataStore(s => s.updateEmployee);
+  const removeEmployee = useDataStore(s => s.removeEmployee);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -33,14 +36,18 @@ export default function AdminEmployees() {
 
   const handleSave = () => {
     if (modal === "add") {
-      const newEmp = { id: Date.now(), name: form.name, registration_number: form.registrationNumber,
-        email: form.email, whatsapp: form.whatsapp, funcao: form.funcao, setor: form.setor, distribuicao: form.distribuicao,
-        is_locked: false, profile_image_url: null };
-      setEmployees(prev => [...prev, newEmp]);
+      addEmployee({
+        id: Date.now(), name: form.name, registration_number: form.registrationNumber,
+        password: "", email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
+        setor: form.setor, distribuicao: form.distribuicao, is_locked: false, profile_image_url: null,
+      });
       toast({ title: "Funcionário adicionado!" });
-    } else {
-      setEmployees(prev => prev.map(e => e.id === editId ? { ...e, name: form.name, registration_number: form.registrationNumber,
-        email: form.email, whatsapp: form.whatsapp, funcao: form.funcao, setor: form.setor, distribuicao: form.distribuicao } : e));
+    } else if (editId !== null) {
+      updateEmployee(editId, {
+        name: form.name, registration_number: form.registrationNumber,
+        email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
+        setor: form.setor, distribuicao: form.distribuicao,
+      });
       toast({ title: "Funcionário atualizado!" });
     }
     setModal(null);
@@ -48,21 +55,58 @@ export default function AdminEmployees() {
   };
 
   const handleDelete = () => {
-    setEmployees(prev => prev.filter(e => e.id !== deleteId));
+    if (deleteId !== null) removeEmployee(deleteId);
     toast({ title: "Funcionário excluído" });
     setDeleteId(null);
   };
 
   const handleUnlock = (id: number) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, is_locked: false } : e));
+    updateEmployee(id, { is_locked: false });
     toast({ title: "Funcionário desbloqueado" });
   };
 
   const handleChangePassword = () => {
     if (!newPassword || newPassword.length < 6) return toast({ title: "Mínimo 6 caracteres", variant: "destructive" });
+    if (passwordModal !== null) {
+      updateEmployee(passwordModal, { password: newPassword });
+    }
     toast({ title: "Senha alterada com sucesso!" });
     setPasswordModal(null);
     setNewPassword("");
+  };
+
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const lines = text.split("\n").filter(l => l.trim());
+      let count = 0;
+      lines.forEach(line => {
+        const cols = line.split(",").map(c => c.trim());
+        if (cols.length >= 2) {
+          addEmployee({
+            id: Date.now() + Math.random(),
+            registration_number: cols[0] || "",
+            name: cols[1] || "",
+            email: cols[2] || "",
+            whatsapp: cols[3] || "",
+            funcao: cols[4] || "",
+            setor: cols[5] || "",
+            distribuicao: cols[6] || "",
+            password: "",
+            is_locked: false,
+            profile_image_url: null,
+          });
+          count++;
+        }
+      });
+      toast({ title: `${count} funcionário(s) importado(s)!` });
+      setModal(null);
+    };
+    reader.readAsText(file);
+    if (csvRef.current) csvRef.current.value = "";
   };
 
   const fields = [
@@ -202,7 +246,7 @@ export default function AdminEmployees() {
               <p className="text-sm text-gray-600 font-medium mb-1">Formato (7 colunas):</p>
               <code className="text-xs text-gray-500">matricula, nome, email, whatsapp, funcao, setor, distribuicao</code>
             </div>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={() => { toast({ title: "CSV importado!" }); setModal(null); }} />
+            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
             <button onClick={() => csvRef.current?.click()}
               className="w-full py-4 border-2 border-dashed border-green-300 rounded-2xl text-green-700 font-semibold flex items-center justify-center gap-2"
               data-testid="button-select-csv">
