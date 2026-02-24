@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Package, ShoppingBag, LogOut, Layers, CalendarClock } from "lucide-react";
-import { useAuthStore } from "@/lib/store";
+import { LayoutDashboard, Users, Package, ShoppingBag, LogOut, Layers, CalendarClock, Settings } from "lucide-react";
+import { useAuthStore, useSettingsStore } from "@/lib/store";
 
 const tabs = [
   { path: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -9,6 +9,7 @@ const tabs = [
   { path: "/admin/produtos", label: "Produtos", icon: Package },
   { path: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
   { path: "/admin/ciclos", label: "Ciclos", icon: CalendarClock },
+  { path: "/admin/config", label: "Config", icon: Settings },
 ];
 
 interface AdminLayoutProps {
@@ -17,13 +18,14 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { logout } = useAuthStore();
+  const { companyName } = useSettingsStore();
   const [location, navigate] = useLocation();
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 max-w-2xl mx-auto">
       <header className="bg-green-900 text-white px-4 pt-12 pb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-extrabold">Brasfrut Admin</h1>
+          <h1 className="text-xl font-extrabold">{companyName} Admin</h1>
           <p className="text-green-200 text-xs">Painel Administrativo</p>
         </div>
         <button

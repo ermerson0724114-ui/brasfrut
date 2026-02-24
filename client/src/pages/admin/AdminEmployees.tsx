@@ -76,28 +76,30 @@ export default function AdminEmployees() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-green-900 text-white px-4 pt-6 pb-4">
-        <div className="flex items-center justify-between">
+    <div className="bg-gray-50">
+      <div className="px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
-            <Users size={22} />
+            <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center">
+              <Users size={20} className="text-green-800" />
+            </div>
             <div>
-              <h1 className="text-xl font-extrabold">Funcionários</h1>
-              <p className="text-green-200 text-xs">{employees.length} cadastrado(s)</p>
+              <h2 className="text-lg font-extrabold text-gray-800">Funcionários</h2>
+              <p className="text-gray-500 text-xs">{employees.length} cadastrado(s)</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setModal("csv")} className="w-9 h-9 bg-green-800 rounded-xl flex items-center justify-center" data-testid="button-import-csv"><Upload size={16} /></button>
-            <button onClick={() => { setForm(emptyForm); setEditId(null); setModal("add"); }} className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center" data-testid="button-add-employee"><Plus size={18} /></button>
+            <button onClick={() => setModal("csv")} className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600" data-testid="button-import-csv"><Upload size={16} /></button>
+            <button onClick={() => { setForm(emptyForm); setEditId(null); setModal("add"); }} className="w-9 h-9 bg-green-900 text-white rounded-xl flex items-center justify-center" data-testid="button-add-employee"><Plus size={18} /></button>
           </div>
         </div>
-        <div className="mt-3 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-300" />
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome ou matrícula..."
-            className="w-full bg-green-800/50 text-white placeholder-green-300 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none"
+            className="w-full bg-gray-100 text-gray-800 placeholder-gray-400 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
             data-testid="input-search-employees"
           />
         </div>

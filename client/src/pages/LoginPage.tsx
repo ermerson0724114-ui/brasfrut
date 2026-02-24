@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Eye, EyeOff, Leaf } from "lucide-react";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, useSettingsStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 
 const DEMO_EMPLOYEES = [
@@ -13,6 +13,7 @@ const ADMIN_CREDS = { registrationNumber: "admin", password: "admin123" };
 export default function LoginPage() {
   const [, navigate] = useLocation();
   const { setAuth } = useAuthStore();
+  const { logoUrl, companyName } = useSettingsStore();
   const { toast } = useToast();
   const [tab, setTab] = useState("employee");
   const [form, setForm] = useState({ registrationNumber: "", password: "" });
@@ -78,10 +79,16 @@ export default function LoginPage() {
       </div>
       <div className="w-full max-w-sm relative">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-3xl mb-4">
-            <Leaf size={40} className="text-green-300" />
-          </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Brasfrut</h1>
+          {logoUrl ? (
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-4 overflow-hidden bg-white/10 backdrop-blur-sm">
+              <img src={logoUrl} alt={companyName} className="w-full h-full object-contain p-1" data-testid="img-login-logo" />
+            </div>
+          ) : (
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-3xl mb-4">
+              <Leaf size={40} className="text-green-300" />
+            </div>
+          )}
+          <h1 className="text-3xl font-extrabold text-white tracking-tight" data-testid="text-company-name">{companyName}</h1>
           <p className="text-green-300 text-sm mt-1 font-medium">Sistema de Pedidos</p>
         </div>
 
@@ -150,14 +157,6 @@ export default function LoginPage() {
                   {loading ? "Entrando..." : "Entrar"}
                 </button>
               </form>
-
-              <div className="mt-5 pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-400 text-center font-medium mb-2">Acesso demo</p>
-                <div className="space-y-1.5">
-                  <p className="text-xs text-gray-500 text-center">Funcionário: <span className="font-semibold text-gray-700">001234</span> / <span className="font-semibold text-gray-700">123456</span></p>
-                  <p className="text-xs text-gray-500 text-center">Admin: <span className="font-semibold text-gray-700">admin</span> / <span className="font-semibold text-gray-700">admin123</span></p>
-                </div>
-              </div>
             </>
           ) : (
             <form onSubmit={handleCreatePassword} className="space-y-4">
@@ -204,7 +203,7 @@ export default function LoginPage() {
             </form>
           )}
         </div>
-        <p className="text-center text-green-400/60 text-xs mt-6">Brasfrut Frutos do Brasil</p>
+        <p className="text-center text-green-400/60 text-xs mt-6">{companyName} Frutos do Brasil</p>
       </div>
     </div>
   );

@@ -59,18 +59,20 @@ export default function AdminGroups() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-green-900 text-white px-4 pt-6 pb-4 flex items-center justify-between">
+    <div className="bg-gray-50">
+      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Layers size={22} />
+          <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center">
+            <Layers size={20} className="text-green-800" />
+          </div>
           <div>
-            <h1 className="text-xl font-extrabold">Grupos</h1>
-            <p className="text-green-200 text-xs">{groups.length} grupo(s)</p>
+            <h2 className="text-lg font-extrabold text-gray-800">Grupos</h2>
+            <p className="text-gray-500 text-xs">{groups.length} grupo(s)</p>
           </div>
         </div>
         <button
           onClick={() => { setForm({ name: "", description: "", sortOrder: 0, itemLimit: "" }); setEditId(null); setModal("add"); }}
-          className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center"
+          className="w-9 h-9 bg-green-900 text-white rounded-xl flex items-center justify-center"
           data-testid="button-add-group"
         >
           <Plus size={18} />

@@ -29,3 +29,22 @@ export const useAuthStore = create<AuthStore>()(
     { name: "brasfrut_auth" }
   )
 );
+
+interface SettingsStore {
+  logoUrl: string | null;
+  companyName: string;
+  setLogoUrl: (url: string | null) => void;
+  setCompanyName: (name: string) => void;
+}
+
+export const useSettingsStore = create<SettingsStore>()(
+  persist(
+    (set) => ({
+      logoUrl: null,
+      companyName: "Brasfrut",
+      setLogoUrl: (url) => set({ logoUrl: url }),
+      setCompanyName: (name) => set({ companyName: name }),
+    }),
+    { name: "brasfrut_settings" }
+  )
+);
