@@ -27,8 +27,10 @@ export default function OrderPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const activeCycle = cycles.find(c => c.status === "open");
-  const isClosed = !activeCycle || (activeCycle && new Date() > new Date(activeCycle.end_date));
+  const isPastDeadline = activeCycle ? new Date() > new Date(activeCycle.end_date) : false;
+  const isClosed = activeCycle ? isPastDeadline || activeCycle.status === "closed" : false;
   const existingOrder = orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle?.id);
+  const noCycle = !activeCycle;
 
   const createOrder = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/orders", data),
@@ -226,7 +228,7 @@ export default function OrderPage() {
                     product={product}
                     qty={cart[product.id] || 0}
                     canAdd={canAdd(product)}
-                    isClosed={isClosed}
+                    isClosed={isClosed && !noCycle}
                     onAdd={() => setQty(product.id, 1)}
                     onRemove={() => setQty(product.id, -1)}
                   />
@@ -246,7 +248,7 @@ export default function OrderPage() {
                 product={product}
                 qty={cart[product.id] || 0}
                 canAdd={canAdd(product)}
-                isClosed={isClosed}
+                isClosed={isClosed && !noCycle}
                 onAdd={() => setQty(product.id, 1)}
                 onRemove={() => setQty(product.id, -1)}
               />
@@ -255,7 +257,7 @@ export default function OrderPage() {
         )}
       </div>
 
-      {!isClosed && totalItems > 0 && (
+      {totalItems > 0 && (
         <div
           className="fixed bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white border-t border-gray-100 px-4 pt-3"
           style={{ paddingBottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
@@ -269,14 +271,20 @@ export default function OrderPage() {
               R$ {totalValue.toFixed(2).replace(".", ",")}
             </span>
           </div>
-          <button
-            onClick={() => setShowTerm(true)}
-            disabled={submitting}
-            className="w-full py-4 bg-green-900 text-white font-bold rounded-2xl disabled:opacity-60"
-            data-testid="button-confirm-order"
-          >
-            {submitted ? "Atualizar Pedido" : "Confirmar Pedido"}
-          </button>
+          {noCycle ? (
+            <p className="text-center text-sm text-amber-600 font-semibold py-2">Nenhum ciclo aberto no momento. Aguarde o administrador abrir um ciclo.</p>
+          ) : isClosed ? (
+            <p className="text-center text-sm text-red-500 font-semibold py-2">Ciclo encerrado. Pedidos fechados.</p>
+          ) : (
+            <button
+              onClick={() => setShowTerm(true)}
+              disabled={submitting}
+              className="w-full py-4 bg-green-900 text-white font-bold rounded-2xl disabled:opacity-60"
+              data-testid="button-confirm-order"
+            >
+              {submitted ? "Atualizar Pedido" : "Confirmar Pedido"}
+            </button>
+          )}
         </div>
       )}
 
@@ -288,9 +296,8 @@ export default function OrderPage() {
           >
             <h3 className="font-extrabold text-lg mb-3">Termo de Autorização</h3>
             <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-2xl p-4 mb-4">
-              Eu, <strong>{user?.name}</strong>, declaro estar ciente e de acordo com os valores referentes
-              aos produtos selecionados neste pedido, autorizando expressamente o desconto correspondente
-              em minha folha de pagamento, conforme as regras internas da empresa.
+              Eu, <strong>{user?.name}</strong>, declaro que li e autorizo a Brasfrut Frutos do Brasil
+              a realizar o desconto na minha folha de pagamento, referente ao valor deste pedido.
             </p>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <input
