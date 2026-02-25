@@ -237,13 +237,17 @@ export default function AdminEmployees() {
             </div>
             <div className="flex gap-1">
               {(emp as any).status === "inactive" ? (
-                <button onClick={() => handleToggleStatus(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-600" title="Reativar" data-testid={`button-reactivate-${emp.id}`}><RefreshCw size={14} /></button>
+                <>
+                  <button onClick={() => handleToggleStatus(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-600" title="Reativar" data-testid={`button-reactivate-${emp.id}`}><RefreshCw size={14} /></button>
+                  <button onClick={() => setDeleteId(emp.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" title="Excluir" data-testid={`button-delete-employee-${emp.id}`}><Trash2 size={14} /></button>
+                </>
               ) : (
                 <>
                   {emp.is_locked && <button onClick={() => handleUnlock(emp.id)} className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600" data-testid={`button-unlock-${emp.id}`}><Unlock size={14} /></button>}
                   <button onClick={() => { setPasswordModal(emp.id); setNewPassword(""); }} className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600" data-testid={`button-password-${emp.id}`}><Key size={13} /></button>
                   <button onClick={() => openEdit(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-700" data-testid={`button-edit-employee-${emp.id}`}><Edit2 size={14} /></button>
                   <button onClick={() => handleToggleStatus(emp)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" title="Desligar" data-testid={`button-deactivate-${emp.id}`}><UserX size={14} /></button>
+                  <button onClick={() => setDeleteId(emp.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-400" title="Excluir" data-testid={`button-delete-employee-${emp.id}`}><Trash2 size={14} /></button>
                 </>
               )}
             </div>

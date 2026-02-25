@@ -218,7 +218,7 @@ export default function OrderPage() {
         </div>
       )}
 
-      <div className="px-4 pt-3 space-y-2">
+      <div className="px-4 pt-3 space-y-2" style={{ paddingBottom: totalItems > 0 ? "14rem" : "6rem" }}>
         {selectedGroupData && selectedGroupData.subgroups.length > 0 ? (
           selectedGroupData.subgroups.map((sub) => {
             const subProducts = groupProducts.filter(p => p.subgroup_id === sub.id);
