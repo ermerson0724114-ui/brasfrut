@@ -65,7 +65,7 @@ export default function LoginPage() {
       const data = await res.json();
       setAuth(data.user, data.token);
       navigate("/dashboard");
-      toast({ title: `Bem-vindo, ${data.user.name.split(" ")[0]}!` });
+      toast({ title: `Bem-vindo, ${data.user.name.split(" ")[0]}!`, variant: "success" });
     } catch (err: any) {
       const msg = err.message?.includes(":") ? err.message.split(": ").slice(1).join(": ") : "Senha incorreta";
       toast({ title: msg, variant: "destructive" });
@@ -85,7 +85,7 @@ export default function LoginPage() {
       const data = await res.json();
       setAuth(data.user, data.token);
       navigate("/admin");
-      toast({ title: `Bem-vindo, ${data.user.name.split(" ")[0]}!` });
+      toast({ title: `Bem-vindo, ${data.user.name.split(" ")[0]}!`, variant: "success" });
     } catch (err: any) {
       const msg = err.message?.includes(":") ? err.message.split(": ").slice(1).join(": ") : "Credenciais inválidas";
       toast({ title: msg, variant: "destructive" });
@@ -103,7 +103,7 @@ export default function LoginPage() {
       const data = await res.json();
       setAuth(data.user, data.token);
       navigate("/dashboard");
-      toast({ title: "Senha criada com sucesso!" });
+      toast({ title: "Senha criada com sucesso!", variant: "success" });
     } catch {
       toast({ title: "Erro ao criar senha", variant: "destructive" });
     }

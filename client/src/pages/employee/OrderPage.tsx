@@ -141,7 +141,7 @@ export default function OrderPage() {
       setSubmitted(true);
       setShowTerm(false);
       sessionStorage.removeItem(cartKey);
-      toast({ title: "Pedido confirmado com sucesso!" });
+      toast({ title: "Pedido confirmado com sucesso!", variant: "success" });
     } catch {
       toast({ title: "Erro ao salvar pedido", variant: "destructive" });
     }
