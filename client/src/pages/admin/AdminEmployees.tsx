@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employee } from "@shared/schema";
+import * as XLSX from "xlsx";
 
 const emptyForm = { name: "", registrationNumber: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "", admissao: "" };
 
@@ -150,47 +151,64 @@ export default function AdminEmployees() {
     setNewPassword("");
   };
 
-  const parseFileContent = (text: string) => {
-    const lines = text.split("\n").filter(l => l.trim());
-    const separator = lines[0]?.includes(";") ? ";" : lines[0]?.includes("\t") ? "\t" : ",";
-    return lines.map(line => {
-      const cols = line.split(separator).map(c => c.trim());
-      return {
-        registration_number: cols[0] || "", name: cols[1] || "", email: cols[2] || "",
-        whatsapp: cols[3] || "", funcao: cols[4] || "", setor: cols[5] || "",
-        distribuicao: cols[6] || "", admissao: cols[7] || "", password: "", is_locked: false,
-      };
-    }).filter(e => e.name && e.registration_number);
+  const headerMap: Record<string, string> = {
+    "matrícula": "registration_number", "matricula": "registration_number",
+    "nome": "name", "name": "name",
+    "email": "email", "e-mail": "email",
+    "whatsapp": "whatsapp", "telefone": "whatsapp", "celular": "whatsapp",
+    "função": "funcao", "funcao": "funcao", "cargo": "funcao",
+    "setor": "setor", "departamento": "setor",
+    "distribuição": "distribuicao", "distribuicao": "distribuicao",
+    "admissão": "admissao", "admissao": "admissao", "data admissão": "admissao",
   };
+  const requiredFields = ["registration_number", "name", "setor", "distribuicao"];
 
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const emps = parseFileContent(reader.result as string);
-      bulkMut.mutate(emps);
-      toast({ title: `${emps.length} funcionário(s) importado(s)!` });
-      setModal(null);
-    };
-    reader.readAsText(file);
-    if (csvRef.current) csvRef.current.value = "";
-  };
+  const parseExcelFile = (buffer: ArrayBuffer): ReturnType<typeof Array<any>> => {
+    const wb = XLSX.read(buffer, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    if (rows.length === 0) return [];
 
-  const handleSyncImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const emps = parseFileContent(reader.result as string);
-      if (emps.length === 0) {
-        toast({ title: "Arquivo vazio ou formato inválido", variant: "destructive" });
-        return;
+    const headers = Object.keys(rows[0]);
+    const colMapping: Record<string, string> = {};
+    for (const h of headers) {
+      const normalized = h.toLowerCase().trim();
+      if (headerMap[normalized]) colMapping[h] = headerMap[normalized];
+    }
+
+    const missingRequired = requiredFields.filter(f => !Object.values(colMapping).includes(f));
+    if (missingRequired.length > 0) {
+      const labels: Record<string, string> = { registration_number: "Matrícula", name: "Nome", setor: "Setor", distribuicao: "Distribuição" };
+      toast({ title: `Colunas obrigatórias ausentes: ${missingRequired.map(f => labels[f]).join(", ")}`, variant: "destructive" });
+      return [];
+    }
+
+    return rows.map(row => {
+      const emp: any = { registration_number: "", name: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "", admissao: "", password: "", is_locked: false };
+      for (const [excelCol, field] of Object.entries(colMapping)) {
+        emp[field] = String(row[excelCol] ?? "").trim();
       }
-      syncMut.mutate(emps);
+      return emp;
+    }).filter((e: any) => e.name && e.registration_number && e.setor && e.distribuicao);
+  };
+
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, mode: "add" | "sync") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const emps = parseExcelFile(reader.result as ArrayBuffer);
+      if (emps.length === 0) return;
+      if (mode === "sync") {
+        syncMut.mutate(emps);
+      } else {
+        bulkMut.mutate(emps);
+        toast({ title: `${emps.length} funcionário(s) importado(s)!` });
+      }
       setModal(null);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
+    if (csvRef.current) csvRef.current.value = "";
     if (syncRef.current) syncRef.current.value = "";
   };
 
@@ -374,13 +392,14 @@ export default function AdminEmployees() {
             </div>
 
             <div className="bg-gray-50 rounded-2xl p-4 mb-4">
-              <p className="text-sm text-gray-600 font-medium mb-1">Formato do arquivo (CSV ou TXT):</p>
-              <code className="text-xs text-gray-500">matrícula, nome, email, whatsapp, função, setor, distribuição, admissão</code>
-              <p className="text-xs text-gray-400 mt-1">Separadores aceitos: vírgula, ponto-e-vírgula ou tabulação</p>
+              <p className="text-sm text-gray-600 font-medium mb-1">Formato: Planilha Excel (.xlsx, .xls)</p>
+              <p className="text-xs text-gray-500">As colunas devem ter os mesmos nomes dos campos do formulário:</p>
+              <code className="text-xs text-gray-500 block mt-1">Matrícula, Nome, Setor, Distribuição</code>
+              <p className="text-xs text-gray-400 mt-1">Campos opcionais: Email, WhatsApp, Função, Admissão</p>
             </div>
 
-            <input ref={syncRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleSyncImport} />
-            <input ref={csvRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvImport} />
+            <input ref={syncRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => handleExcelImport(e, "sync")} />
+            <input ref={csvRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => handleExcelImport(e, "add")} />
 
             <div className="space-y-3">
               <button onClick={() => syncRef.current?.click()}
