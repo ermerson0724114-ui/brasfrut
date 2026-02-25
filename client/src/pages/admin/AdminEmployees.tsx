@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
-import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key, UserCheck, UserX, RefreshCw } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
+import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key, UserCheck, UserX, RefreshCw, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employee } from "@shared/schema";
 
-const emptyForm = { name: "", registrationNumber: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "" };
+const emptyForm = { name: "", registrationNumber: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "", admissao: "" };
 
 export default function AdminEmployees() {
   const { toast } = useToast();
@@ -18,6 +18,8 @@ export default function AdminEmployees() {
   const [passwordModal, setPasswordModal] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
+  const [selectedSetores, setSelectedSetores] = useState<Set<string>>(new Set(["__all__"]));
+  const [showSetorFilter, setShowSetorFilter] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const syncRef = useRef<HTMLInputElement>(null);
 
@@ -55,19 +57,46 @@ export default function AdminEmployees() {
     },
   });
 
+  const allSetores = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach(e => { if (e.setor) set.add(e.setor); });
+    return Array.from(set).sort();
+  }, [employees]);
+
   const activeEmployees = employees.filter(e => (e as any).status !== "inactive");
   const inactiveEmployees = employees.filter(e => (e as any).status === "inactive");
   const displayList = statusFilter === "active" ? activeEmployees : inactiveEmployees;
 
-  const filtered = displayList.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    e.registration_number?.includes(search)
-  );
+  const isAllSelected = selectedSetores.has("__all__");
+
+  const filtered = displayList
+    .filter(e => {
+      const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
+        e.registration_number?.includes(search);
+      const matchSetor = isAllSelected || selectedSetores.has(e.setor || "");
+      return matchSearch && matchSetor;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  const toggleSetor = (setor: string) => {
+    setSelectedSetores(prev => {
+      const next = new Set(prev);
+      if (setor === "__all__") {
+        return new Set(["__all__"]);
+      }
+      next.delete("__all__");
+      if (next.has(setor)) next.delete(setor);
+      else next.add(setor);
+      if (next.size === 0) return new Set(["__all__"]);
+      return next;
+    });
+  };
 
   const openEdit = (emp: Employee) => {
     setForm({
       name: emp.name, registrationNumber: emp.registration_number, email: emp.email || "",
-      whatsapp: emp.whatsapp || "", funcao: emp.funcao || "", setor: emp.setor || "", distribuicao: emp.distribuicao || "",
+      whatsapp: emp.whatsapp || "", funcao: emp.funcao || "", setor: emp.setor || "",
+      distribuicao: emp.distribuicao || "", admissao: (emp as any).admissao || "",
     });
     setEditId(emp.id);
     setModal("edit");
@@ -78,7 +107,8 @@ export default function AdminEmployees() {
       createMut.mutate({
         name: form.name, registration_number: form.registrationNumber, password: "",
         email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
-        setor: form.setor, distribuicao: form.distribuicao, is_locked: false, status: "active",
+        setor: form.setor, distribuicao: form.distribuicao, admissao: form.admissao,
+        is_locked: false, status: "active",
       });
       toast({ title: "Funcionário adicionado!" });
     } else if (editId !== null) {
@@ -86,7 +116,7 @@ export default function AdminEmployees() {
         id: editId, data: {
           name: form.name, registration_number: form.registrationNumber,
           email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
-          setor: form.setor, distribuicao: form.distribuicao,
+          setor: form.setor, distribuicao: form.distribuicao, admissao: form.admissao,
         }
       });
       toast({ title: "Funcionário atualizado!" });
@@ -128,7 +158,7 @@ export default function AdminEmployees() {
       return {
         registration_number: cols[0] || "", name: cols[1] || "", email: cols[2] || "",
         whatsapp: cols[3] || "", funcao: cols[4] || "", setor: cols[5] || "",
-        distribuicao: cols[6] || "", password: "", is_locked: false,
+        distribuicao: cols[6] || "", admissao: cols[7] || "", password: "", is_locked: false,
       };
     }).filter(e => e.name && e.registration_number);
   };
@@ -172,6 +202,7 @@ export default function AdminEmployees() {
     { key: "funcao", label: "Função", placeholder: "Ex: Operador" },
     { key: "setor", label: "Setor", placeholder: "Ex: Produção" },
     { key: "distribuicao", label: "Distribuição", placeholder: "Ex: Matriz" },
+    { key: "admissao", label: "Admissão", placeholder: "Ex: 01/01/2024" },
   ];
 
   if (isLoading) return <div className="text-center py-20 text-gray-400"><p className="text-sm">Carregando...</p></div>;
@@ -208,12 +239,48 @@ export default function AdminEmployees() {
           </button>
         </div>
 
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou matrícula..."
-            className="w-full bg-gray-100 text-gray-800 placeholder-gray-400 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
-            data-testid="input-search-employees" />
+        <div className="flex gap-2 mb-3">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou matrícula..."
+              className="w-full bg-gray-100 text-gray-800 placeholder-gray-400 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
+              data-testid="input-search-employees" />
+          </div>
+          {allSetores.length > 0 && (
+            <button
+              onClick={() => setShowSetorFilter(!showSetorFilter)}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${!isAllSelected ? "bg-green-900 text-white" : "bg-gray-100 text-gray-600"}`}
+              data-testid="button-filter-setor"
+            >
+              <Filter size={16} />
+            </button>
+          )}
         </div>
+
+        {showSetorFilter && allSetores.length > 0 && (
+          <div className="bg-white rounded-2xl p-3 mb-3 shadow-sm border border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Filtrar por Setor</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => toggleSetor("__all__")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${isAllSelected ? "bg-green-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                data-testid="filter-setor-all"
+              >
+                Todos
+              </button>
+              {allSetores.map(setor => (
+                <button
+                  key={setor}
+                  onClick={() => toggleSetor(setor)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${selectedSetores.has(setor) ? "bg-green-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                  data-testid={`filter-setor-${setor}`}
+                >
+                  {setor}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 space-y-2 pb-24">
@@ -308,7 +375,7 @@ export default function AdminEmployees() {
 
             <div className="bg-gray-50 rounded-2xl p-4 mb-4">
               <p className="text-sm text-gray-600 font-medium mb-1">Formato do arquivo (CSV ou TXT):</p>
-              <code className="text-xs text-gray-500">matrícula, nome, email, whatsapp, função, setor, distribuição</code>
+              <code className="text-xs text-gray-500">matrícula, nome, email, whatsapp, função, setor, distribuição, admissão</code>
               <p className="text-xs text-gray-400 mt-1">Separadores aceitos: vírgula, ponto-e-vírgula ou tabulação</p>
             </div>
 

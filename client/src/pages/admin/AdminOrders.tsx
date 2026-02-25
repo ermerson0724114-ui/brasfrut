@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download, Trash2, Eye, Edit2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ShoppingBag, Plus, Minus, Download, Trash2, Eye, Edit2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,7 +21,7 @@ export default function AdminOrders() {
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: employees = [] } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
 
-  const [selectedCycleId, setSelectedCycleId] = useState<number | null>(null);
+  const [cycleIndex, setCycleIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [editModal, setEditModal] = useState<OrderData | null>(null);
   const [viewModal, setViewModal] = useState<OrderData | null>(null);
@@ -30,8 +30,9 @@ export default function AdminOrders() {
   const [saving, setSaving] = useState(false);
   const [deleteOrderId, setDeleteOrderId] = useState<number | null>(null);
 
-  const activeCycleId = selectedCycleId ?? cycles[0]?.id ?? null;
-  const selectedCycle = cycles.find(c => c.id === activeCycleId);
+  const sortedCycles = [...cycles].sort((a, b) => (b.year * 100 + b.month) - (a.year * 100 + a.month));
+  const activeCycleId = sortedCycles[cycleIndex]?.id ?? null;
+  const selectedCycle = sortedCycles[cycleIndex];
   const isClosed = selectedCycle?.status === "closed";
   const cycleOrders = orders.filter(o => o.cycle_id === activeCycleId);
 
@@ -179,24 +180,37 @@ export default function AdminOrders() {
             <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center"><ShoppingBag size={20} className="text-green-800" /></div>
             <div><h2 className="text-lg font-extrabold text-gray-800">Pedidos</h2><p className="text-gray-500 text-xs">{cycleOrders.length} pedido(s)</p></div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleExportExcel}
-              className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600"
-              title="Exportar Excel"
-              data-testid="button-export-excel">
-              <Download size={16} />
-            </button>
-            {cycles.length > 0 && (
-              <div className="relative">
-                <select value={activeCycleId ?? ""} onChange={e => setSelectedCycleId(parseInt(e.target.value))}
-                  className="appearance-none bg-gray-100 text-gray-800 text-xs rounded-xl px-3 py-2 pr-7 outline-none" data-testid="select-cycle">
-                  {cycles.map(c => <option key={c.id} value={c.id}>{MONTHS_FULL[c.month - 1]}/{c.year}</option>)}
-                </select>
-                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            )}
-          </div>
+          <button onClick={handleExportExcel}
+            className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600"
+            title="Exportar Excel"
+            data-testid="button-export-excel">
+            <Download size={16} />
+          </button>
         </div>
+        {sortedCycles.length > 0 && (
+          <div className="flex items-center justify-between bg-white rounded-2xl shadow-sm px-2 py-1.5 mb-3">
+            <button
+              onClick={() => setCycleIndex(i => Math.min(i + 1, sortedCycles.length - 1))}
+              disabled={cycleIndex >= sortedCycles.length - 1}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-600 disabled:opacity-30"
+              data-testid="button-cycle-prev"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <p className="font-bold text-gray-800 text-sm" data-testid="text-cycle-period">
+              {selectedCycle ? `${MONTHS_FULL[selectedCycle.month - 1]} / ${selectedCycle.year}` : "—"}
+            </p>
+            <button
+              onClick={() => setCycleIndex(i => Math.max(i - 1, 0))}
+              disabled={cycleIndex <= 0}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-600 disabled:opacity-30"
+              data-testid="button-cycle-next"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar funcionário..."

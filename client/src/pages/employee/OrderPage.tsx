@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Plus, Minus, ShoppingCart, CheckCircle, Leaf } from "lucide-react";
+import { Plus, Minus, ShoppingCart, CheckCircle, Leaf, Edit2, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import type { Product, Cycle } from "@shared/schema";
 import { MONTHS_FULL } from "@/lib/mockData";
 
@@ -15,6 +16,7 @@ interface CurrentCycleData { cycle: Cycle; isOpen: boolean; daysRemaining: numbe
 export default function OrderPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
@@ -41,11 +43,13 @@ export default function OrderPage() {
   const [showTerm, setShowTerm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const activeCycle = currentCycleData?.cycle;
   const isOpen = currentCycleData?.isOpen ?? false;
   const isClosed = !isOpen;
   const existingOrder = activeCycle ? orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle.id) : undefined;
+  const hasConfirmedOrder = existingOrder?.status === "confirmed";
 
   const createOrder = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/orders", data),
@@ -55,13 +59,17 @@ export default function OrderPage() {
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/orders/${id}`, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
   });
+  const deleteOrderMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/orders/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+  });
 
   useEffect(() => {
     if (groups.length > 0 && selectedGroup === 0) setSelectedGroup(groups[0].id);
   }, [groups, selectedGroup]);
 
   useEffect(() => {
-    if (existingOrder) {
+    if (existingOrder && !editing) {
       const cartObj: Record<number, number> = {};
       existingOrder.items?.forEach(i => { cartObj[i.product_id] = i.quantity; });
       setCart(cartObj);
@@ -148,9 +156,11 @@ export default function OrderPage() {
         });
       }
       setSubmitted(true);
+      setEditing(false);
       setShowTerm(false);
       sessionStorage.removeItem(cartKey);
       toast({ title: "Pedido confirmado com sucesso!", variant: "success" });
+      navigate("/dashboard");
     } catch {
       toast({ title: "Erro ao salvar pedido", variant: "destructive" });
     }
@@ -158,15 +168,27 @@ export default function OrderPage() {
   };
 
   const handleDelete = async () => {
+    setShowDeleteConfirm(false);
+    if (existingOrder) {
+      await deleteOrderMut.mutateAsync(existingOrder.id);
+    }
     setCartState({});
     sessionStorage.removeItem(cartKey);
     setSubmitted(false);
+    setEditing(false);
     setAgreed(false);
-    setShowDeleteConfirm(false);
-    if (existingOrder) {
-      await updateOrder.mutateAsync({ id: existingOrder.id, data: { items: [], total: "0.00", status: "draft" } });
-    }
     toast({ title: "Pedido excluído" });
+  };
+
+  const handleStartEdit = () => {
+    if (existingOrder) {
+      const cartObj: Record<number, number> = {};
+      existingOrder.items?.forEach(i => { cartObj[i.product_id] = i.quantity; });
+      setCart(cartObj);
+    }
+    setEditing(true);
+    setSubmitted(false);
+    setAgreed(false);
   };
 
   const selectedGroupData = groups.find(g => g.id === selectedGroup);
@@ -184,18 +206,100 @@ export default function OrderPage() {
     );
   }
 
+  if (hasConfirmedOrder && !editing) {
+    return (
+      <div className="px-4 py-8 space-y-4">
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
+          <CheckCircle size={40} className="mx-auto text-green-600 mb-3" />
+          <h3 className="font-extrabold text-lg text-green-900 mb-1">Pedido Confirmado</h3>
+          <p className="text-sm text-green-700 mb-1">
+            {activeCycle ? `${MONTHS_FULL[activeCycle.month - 1]} / ${activeCycle.year}` : ""}
+          </p>
+          <p className="text-2xl font-extrabold text-green-900 mt-2" data-testid="text-confirmed-total">
+            R$ {parseFloat(existingOrder!.total).toFixed(2).replace(".", ",")}
+          </p>
+          <p className="text-xs text-green-600 mt-1">{existingOrder!.items?.length} item(ns)</p>
+        </div>
+
+        {isOpen && (
+          <div className="flex gap-3">
+            <button
+              onClick={handleStartEdit}
+              className="flex-1 py-3.5 bg-green-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+              data-testid="button-edit-existing-order"
+            >
+              <Edit2 size={16} />
+              Editar Pedido
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="py-3.5 px-5 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center justify-center gap-2 border border-red-200"
+              data-testid="button-delete-existing-order"
+            >
+              <Trash2 size={16} />
+              Excluir
+            </button>
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="font-bold text-gray-800 text-sm">Itens do Pedido</p>
+          </div>
+          {(() => {
+            const grouped = new Map<string, typeof existingOrder.items>();
+            existingOrder!.items?.forEach(item => {
+              const key = item.group_name_snapshot || "Outros";
+              if (!grouped.has(key)) grouped.set(key, []);
+              grouped.get(key)!.push(item);
+            });
+            return Array.from(grouped.entries()).map(([groupName, items]) => {
+              const subtotal = items.reduce((s, i) => s + parseFloat(i.unit_price) * i.quantity, 0);
+              return (
+                <div key={groupName}>
+                  <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">{groupName}</p>
+                  </div>
+                  {items.map(item => (
+                    <div key={item.id} className="px-4 py-2.5 flex items-center justify-between border-b border-gray-50">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{item.product_name_snapshot}</p>
+                        {item.subgroup_name_snapshot && <p className="text-xs text-gray-400">{item.subgroup_name_snapshot}</p>}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-800">{item.quantity}x</p>
+                        <p className="text-xs text-gray-500">R$ {(parseFloat(item.unit_price) * item.quantity).toFixed(2).replace(".", ",")}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="px-4 py-2 bg-gray-50/60 flex justify-between border-t border-gray-100">
+                    <p className="text-xs font-semibold text-gray-500">Subtotal {groupName}</p>
+                    <p className="text-xs font-bold text-gray-700">R$ {subtotal.toFixed(2).replace(".", ",")}</p>
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
+              <h3 className="font-extrabold text-lg mb-2">Excluir pedido?</h3>
+              <p className="text-gray-500 text-sm mb-5">Todos os itens do pedido serão removidos. Deseja continuar?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 border border-gray-200 rounded-2xl font-semibold text-gray-600" data-testid="button-cancel-delete">Cancelar</button>
+                <button onClick={handleDelete} className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold" data-testid="button-confirm-delete">Excluir</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="pb-36">
-      {submitted && (
-        <div className="mx-4 mt-4 bg-green-50 border border-green-200 rounded-2xl p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle size={16} className="text-green-600" />
-            <p className="text-sm font-semibold text-green-800">Pedido confirmado</p>
-          </div>
-          <button onClick={() => setShowDeleteConfirm(true)} className="text-xs text-red-500 font-semibold underline" data-testid="button-delete-order">Excluir</button>
-        </div>
-      )}
-
       <div className="px-4 pt-4 flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
         {groups.map(g => (
           <button
@@ -340,7 +444,7 @@ export default function OrderPage() {
               className="w-full py-4 bg-green-900 text-white font-bold rounded-2xl disabled:opacity-60"
               data-testid="button-confirm-order"
             >
-              {submitted ? "Atualizar Pedido" : "Confirmar Pedido"}
+              {editing ? "Atualizar Pedido" : "Confirmar Pedido"}
             </button>
           )}
         </div>

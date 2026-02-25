@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, Trash2, X, Layers, ChevronDown, ChevronUp, GripVertical, Package } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Layers, ChevronDown, ChevronUp, GripVertical, Package, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -212,7 +212,8 @@ export default function AdminGroups() {
                               <ProductRow key={p.id} product={p} index={pIdx} total={subProducts.length}
                                 onEdit={() => openEditProduct(p)}
                                 onDelete={() => setDeleteTarget({ type: "product", id: p.id, name: p.name })}
-                                onMove={(dir) => moveProduct(g.id, sub.id, p.id, dir)} />
+                                onMove={(dir) => moveProduct(g.id, sub.id, p.id, dir)}
+                                onToggle={() => { updateProduct.mutate({ id: p.id, data: { available: !p.available } }); }} />
                             ))}
                           </div>
                         );
@@ -230,7 +231,8 @@ export default function AdminGroups() {
                         <ProductRow key={p.id} product={p} index={pIdx} total={directProducts.length}
                           onEdit={() => openEditProduct(p)}
                           onDelete={() => setDeleteTarget({ type: "product", id: p.id, name: p.name })}
-                          onMove={(dir) => moveProduct(g.id, null, p.id, dir)} />
+                          onMove={(dir) => moveProduct(g.id, null, p.id, dir)}
+                          onToggle={() => { updateProduct.mutate({ id: p.id, data: { available: !p.available } }); }} />
                       ))}
                       <div className="px-4 py-2 flex gap-2">
                         <button onClick={() => openAddProduct(g.id)}
@@ -378,12 +380,12 @@ export default function AdminGroups() {
   );
 }
 
-function ProductRow({ product, index, total, onEdit, onDelete, onMove }: {
+function ProductRow({ product, index, total, onEdit, onDelete, onMove, onToggle }: {
   product: Product; index: number; total: number;
-  onEdit: () => void; onDelete: () => void; onMove: (dir: -1 | 1) => void;
+  onEdit: () => void; onDelete: () => void; onMove: (dir: -1 | 1) => void; onToggle: () => void;
 }) {
   return (
-    <div className="flex items-center px-4 py-2 gap-2 border-b border-gray-50 last:border-0" data-testid={`row-product-${product.id}`}>
+    <div className={`flex items-center px-4 py-2 gap-2 border-b border-gray-50 last:border-0 ${!product.available ? "opacity-50" : ""}`} data-testid={`row-product-${product.id}`}>
       <div className="flex flex-col gap-0.5">
         <button onClick={() => onMove(-1)} disabled={index === 0}
           className="w-5 h-4 flex items-center justify-center text-gray-300 disabled:opacity-20"><ChevronUp size={11} /></button>
@@ -394,11 +396,15 @@ function ProductRow({ product, index, total, onEdit, onDelete, onMove }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
-          {!product.available && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded">Inativo</span>}
+          {!product.available && <span className="text-[10px] bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full font-semibold">Inativo</span>}
         </div>
         <p className="text-xs text-gray-500">R$ {parseFloat(product.price).toFixed(2).replace(".", ",")} / {product.unit}</p>
       </div>
       <div className="flex gap-1 flex-shrink-0">
+        <button onClick={onToggle} className={`w-6 h-6 rounded-md flex items-center justify-center ${product.available ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-400"}`}
+          title={product.available ? "Desativar" : "Ativar"} data-testid={`button-toggle-product-${product.id}`}>
+          {product.available ? <Eye size={11} /> : <EyeOff size={11} />}
+        </button>
         <button onClick={onEdit} className="w-6 h-6 bg-green-50 rounded-md flex items-center justify-center text-green-700" data-testid={`button-edit-product-${product.id}`}><Edit2 size={11} /></button>
         <button onClick={onDelete} className="w-6 h-6 bg-red-50 rounded-md flex items-center justify-center text-red-500" data-testid={`button-delete-product-${product.id}`}><Trash2 size={11} /></button>
       </div>

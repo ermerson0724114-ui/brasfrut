@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { MONTHS_FULL } from "@/lib/mockData";
@@ -44,8 +44,7 @@ export default function HistoryPage() {
       return (b.cycle.year * 100 + b.cycle.month) - (a.cycle.year * 100 + a.cycle.month);
     });
 
-  const [selectedId, setSelectedId] = useState<number | null>(myOrders[0]?.id ?? null);
-  const selected = myOrders.find(o => o.id === selectedId);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   if (myOrders.length === 0) {
     return (
@@ -56,33 +55,41 @@ export default function HistoryPage() {
     );
   }
 
+  const selected = myOrders[currentIndex];
   const grouped = selected?.items ? groupItems(selected.items) : [];
   const grandTotal = parseFloat(selected?.total || "0");
+  const cycleLabel = selected?.cycle
+    ? `${MONTHS_FULL[selected.cycle.month - 1]} / ${selected.cycle.year}`
+    : `Pedido #${selected?.id}`;
 
   return (
     <div className="px-4 py-4 space-y-4">
-      <div className="relative">
-        <select
-          value={selectedId ?? ""}
-          onChange={e => setSelectedId(parseInt(e.target.value))}
-          className="w-full appearance-none bg-white border border-gray-200 rounded-2xl px-4 py-3 pr-10 text-sm font-semibold outline-none focus:ring-2 focus:ring-green-500"
-          data-testid="select-history-month"
+      <div className="flex items-center justify-between bg-white rounded-2xl shadow-sm px-2 py-2">
+        <button
+          onClick={() => setCurrentIndex(i => Math.min(i + 1, myOrders.length - 1))}
+          disabled={currentIndex >= myOrders.length - 1}
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 disabled:opacity-30"
+          data-testid="button-history-prev"
         >
-          {myOrders.map(o => (
-            <option key={o.id} value={o.id}>
-              {o.cycle ? `${MONTHS_FULL[o.cycle.month - 1]} / ${o.cycle.year}` : `Pedido #${o.id}`}
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <ChevronLeft size={20} />
+        </button>
+        <p className="font-bold text-gray-800 text-sm" data-testid="text-history-period">
+          {cycleLabel}
+        </p>
+        <button
+          onClick={() => setCurrentIndex(i => Math.max(i - 1, 0))}
+          disabled={currentIndex <= 0}
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 disabled:opacity-30"
+          data-testid="button-history-next"
+        >
+          <ChevronRight size={20} />
+        </button>
       </div>
 
       {selected && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <p className="font-bold text-gray-800">
-              {selected.cycle ? `${MONTHS_FULL[selected.cycle.month - 1]} / ${selected.cycle.year}` : `Pedido #${selected.id}`}
-            </p>
+            <p className="font-bold text-gray-800">{cycleLabel}</p>
             <span className={"text-xs font-bold px-2.5 py-1 rounded-full " +
               (selected.status === "confirmed" ? "bg-green-100 text-green-700" :
                selected.status === "closed" ? "bg-gray-100 text-gray-500" :

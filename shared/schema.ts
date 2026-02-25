@@ -18,6 +18,7 @@ export const employees = pgTable("employees", {
   funcao: text("funcao").default(""),
   setor: text("setor").default(""),
   distribuicao: text("distribuicao").default(""),
+  admissao: text("admissao").default(""),
   status: varchar("status", { length: 20 }).notNull().default("active"),
   failed_attempts: integer("failed_attempts").notNull().default(0),
   is_locked: boolean("is_locked").notNull().default(false),

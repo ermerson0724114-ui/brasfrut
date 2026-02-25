@@ -54,14 +54,14 @@ Somente a sessão de autenticação usa Zustand + localStorage (`brasfrut_auth`)
 
 ### Funcionário (rota `/dashboard`)
 - **Dashboard** `/dashboard` — Status do pedido, total, prazo, gráfico de histórico 12 meses (barras azul cobalto)
-- **Pedido** `/pedido` — Seleção de produtos por grupo/subgrupo com limites, subtotais por grupo, termo de aceite
-- **Histórico** `/historico` — Listagem de pedidos anteriores por mês/ano
+- **Pedido** `/pedido` — Seleção de produtos por grupo/subgrupo com limites, subtotais por grupo, termo de aceite. Pedido confirmado mostra tela de resumo com opções Editar/Excluir. Após confirmar, redireciona ao dashboard.
+- **Histórico** `/historico` — Listagem de pedidos anteriores com navegação por setas < Mês/Ano >
 
 ### Admin (rota `/admin`)
 - **Dashboard** `/admin` — Cards de stats, gráfico anual (barras azul cobalto)
-- **Funcionários** `/admin/funcionarios` — CRUD, importação CSV, alterar senha, desbloquear
-- **Grupos & Produtos** `/admin/grupos` — Grupos colapsáveis com produtos inline, subgrupos, reordenação via setas, CRUD completo
-- **Pedidos** `/admin/pedidos` — Visualização e edição de pedidos por ciclo
+- **Funcionários** `/admin/funcionarios` — CRUD, importação CSV (com campo admissão), alterar senha, desbloquear, filtro por setor (multi-select), lista em ordem alfabética
+- **Grupos & Produtos** `/admin/grupos` — Grupos colapsáveis com produtos inline, subgrupos, reordenação via setas, CRUD completo, botão ativar/desativar produto individual
+- **Pedidos** `/admin/pedidos` — Visualização e edição de pedidos com navegação por setas < Mês/Ano >
 - **Logs** `/admin/logs` — Log de auditoria com prova digital (ID, data/hora, IP, valor, referência, detalhes)
 - **Configurações** `/admin/config` — Alterar senha admin, logo da empresa, nome da empresa, orçamento, email de recuperação
 
