@@ -112,6 +112,15 @@ export async function registerRoutes(
     res.json(g);
   });
 
+  app.patch("/api/groups/reorder", async (req, res) => {
+    const items = req.body as { id: number; sort_order: number }[];
+    for (const item of items) {
+      await storage.updateGroup(item.id, { sort_order: item.sort_order });
+    }
+    const gs = await storage.getGroups();
+    res.json(gs);
+  });
+
   app.patch("/api/groups/:id", async (req, res) => {
     const g = await storage.updateGroup(parseInt(req.params.id), req.body);
     if (!g) return res.status(404).json({ message: "Não encontrado" });
@@ -127,6 +136,14 @@ export async function registerRoutes(
   app.post("/api/subgroups", async (req, res) => {
     const s = await storage.createSubgroup(req.body);
     res.json(s);
+  });
+
+  app.patch("/api/subgroups/reorder", async (req, res) => {
+    const items = req.body as { id: number; sort_order: number }[];
+    for (const item of items) {
+      await storage.updateSubgroup(item.id, { sort_order: item.sort_order });
+    }
+    res.json({ ok: true });
   });
 
   app.patch("/api/subgroups/:id", async (req, res) => {
@@ -149,6 +166,14 @@ export async function registerRoutes(
   app.post("/api/products", async (req, res) => {
     const p = await storage.createProduct(req.body);
     res.json(p);
+  });
+
+  app.patch("/api/products/reorder", async (req, res) => {
+    const items = req.body as { id: number; sort_order: number }[];
+    for (const item of items) {
+      await storage.updateProduct(item.id, { sort_order: item.sort_order });
+    }
+    res.json({ ok: true });
   });
 
   app.patch("/api/products/:id", async (req, res) => {

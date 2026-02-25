@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import {
   settings, employees, groups, subgroups, products, cycles, orders, orderItems,
   type Employee, type InsertEmployee,
@@ -112,8 +112,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGroups(): Promise<GroupWithSubgroups[]> {
-    const allGroups = await db.select().from(groups);
-    const allSubs = await db.select().from(subgroups);
+    const allGroups = await db.select().from(groups).orderBy(asc(groups.sort_order));
+    const allSubs = await db.select().from(subgroups).orderBy(asc(subgroups.sort_order));
     return allGroups.map(g => ({
       ...g,
       subgroups: allSubs.filter(s => s.group_id === g.id),
@@ -138,6 +138,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteGroup(id: number): Promise<void> {
+    await db.delete(products).where(eq(products.group_id, id));
     await db.delete(subgroups).where(eq(subgroups.group_id, id));
     await db.delete(groups).where(eq(groups.id, id));
   }
@@ -161,7 +162,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProducts(): Promise<Product[]> {
-    return db.select().from(products);
+    return db.select().from(products).orderBy(asc(products.sort_order));
   }
 
   async getProduct(id: number): Promise<Product | undefined> {

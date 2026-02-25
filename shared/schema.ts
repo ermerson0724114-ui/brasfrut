@@ -35,6 +35,7 @@ export const subgroups = pgTable("subgroups", {
   group_id: integer("group_id").notNull(),
   name: text("name").notNull(),
   item_limit: integer("item_limit"),
+  sort_order: integer("sort_order").notNull().default(0),
 });
 
 export const products = pgTable("products", {
@@ -45,6 +46,7 @@ export const products = pgTable("products", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0.00"),
   unit: varchar("unit", { length: 20 }).notNull().default("un"),
   available: boolean("available").notNull().default(true),
+  sort_order: integer("sort_order").notNull().default(0),
 });
 
 export const cycles = pgTable("cycles", {

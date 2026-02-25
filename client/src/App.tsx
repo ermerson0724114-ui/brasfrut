@@ -14,9 +14,7 @@ import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminEmployees from "@/pages/admin/AdminEmployees";
 import AdminGroups from "@/pages/admin/AdminGroups";
-import AdminProducts from "@/pages/admin/AdminProducts";
 import AdminOrders from "@/pages/admin/AdminOrders";
-import AdminCycles from "@/pages/admin/AdminCycles";
 import AdminSettings from "@/pages/admin/AdminSettings";
 
 function WithEmployeeLayout({ children }: { children: React.ReactNode }) {
@@ -53,14 +51,8 @@ function Router() {
       <Route path="/admin/grupos">
         <WithAdminLayout><AdminGroups /></WithAdminLayout>
       </Route>
-      <Route path="/admin/produtos">
-        <WithAdminLayout><AdminProducts /></WithAdminLayout>
-      </Route>
       <Route path="/admin/pedidos">
         <WithAdminLayout><AdminOrders /></WithAdminLayout>
-      </Route>
-      <Route path="/admin/ciclos">
-        <WithAdminLayout><AdminCycles /></WithAdminLayout>
       </Route>
       <Route path="/admin/config">
         <WithAdminLayout><AdminSettings /></WithAdminLayout>

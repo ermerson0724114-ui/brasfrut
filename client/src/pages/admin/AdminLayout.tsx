@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Package, ShoppingBag, LogOut, Layers, CalendarClock, Settings } from "lucide-react";
+import { LayoutDashboard, Users, ShoppingBag, LogOut, Layers, Settings } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useQuery } from "@tanstack/react-query";
 
@@ -7,9 +7,7 @@ const tabs = [
   { path: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { path: "/admin/funcionarios", label: "Funcionários", icon: Users },
   { path: "/admin/grupos", label: "Grupos", icon: Layers },
-  { path: "/admin/produtos", label: "Produtos", icon: Package },
   { path: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
-  { path: "/admin/ciclos", label: "Ciclos", icon: CalendarClock },
   { path: "/admin/config", label: "Config", icon: Settings },
 ];
 
