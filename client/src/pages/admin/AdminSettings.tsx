@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Settings, Upload, Trash2, Leaf, Image, Lock } from "lucide-react";
+import { Settings, Upload, Trash2, Leaf, Image, Lock, Mail, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -13,12 +13,24 @@ export default function AdminSettings() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [budgetInput, setBudgetInput] = useState("");
   const [nameLoaded, setNameLoaded] = useState(false);
+  const [emailLoaded, setEmailLoaded] = useState(false);
+  const [budgetLoaded, setBudgetLoaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (settings && !nameLoaded) {
     setNameInput(companyName);
     setNameLoaded(true);
+  }
+  if (settings && !emailLoaded) {
+    setEmailInput(settings.recoveryEmail || "");
+    setEmailLoaded(true);
+  }
+  if (settings && !budgetLoaded) {
+    setBudgetInput(settings.orderBudget || "");
+    setBudgetLoaded(true);
   }
 
   const updateSettings = useMutation({
@@ -52,6 +64,20 @@ export default function AdminSettings() {
     if (!nameInput.trim()) return toast({ title: "Nome não pode ser vazio", variant: "destructive" });
     updateSettings.mutate({ companyName: nameInput.trim() });
     toast({ title: "Nome atualizado!" });
+  };
+
+  const handleSaveEmail = () => {
+    if (!emailInput.trim()) return toast({ title: "Email não pode ser vazio", variant: "destructive" });
+    updateSettings.mutate({ recoveryEmail: emailInput.trim() });
+    toast({ title: "Email de recuperação atualizado!" });
+  };
+
+  const handleSaveBudget = () => {
+    if (budgetInput && (isNaN(parseFloat(budgetInput)) || parseFloat(budgetInput) < 0)) {
+      return toast({ title: "Valor inválido", variant: "destructive" });
+    }
+    updateSettings.mutate({ orderBudget: budgetInput.trim() });
+    toast({ title: budgetInput.trim() ? "Orçamento definido!" : "Orçamento removido (sem limite)" });
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -106,6 +132,45 @@ export default function AdminSettings() {
             <button type="submit" className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
               data-testid="button-change-admin-password">Alterar senha</button>
           </form>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <DollarSign size={18} className="text-green-700" />
+            <h3 className="font-bold text-gray-800">Orçamento por pedido</h3>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">Defina o valor máximo que cada funcionário pode gastar por pedido. Deixe vazio para não ter limite.</p>
+          <div className="space-y-3">
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+              <input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+                placeholder="Sem limite"
+                className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
+                data-testid="input-order-budget" />
+            </div>
+            <button onClick={handleSaveBudget} className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
+              data-testid="button-save-budget">
+              {budgetInput.trim() ? "Salvar orçamento" : "Remover limite"}
+            </button>
+            {settings?.orderBudget && (
+              <p className="text-xs text-center text-gray-500">Limite atual: <span className="font-semibold text-green-900">R$ {parseFloat(settings.orderBudget).toFixed(2).replace(".", ",")}</span></p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Mail size={18} className="text-green-700" />
+            <h3 className="font-bold text-gray-800">Email de recuperação</h3>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">Email usado para recuperar a senha do administrador.</p>
+          <div className="space-y-3">
+            <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="email@exemplo.com"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
+              data-testid="input-recovery-email-settings" />
+            <button onClick={handleSaveEmail} className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
+              data-testid="button-save-recovery-email">Salvar email</button>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl p-5 shadow-sm">

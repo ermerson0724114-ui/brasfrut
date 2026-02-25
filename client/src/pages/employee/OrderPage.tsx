@@ -20,6 +20,9 @@ export default function OrderPage() {
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
   const { data: currentCycleData } = useQuery<CurrentCycleData>({ queryKey: ["/api/cycle/current"] });
+  const { data: settings } = useQuery<Record<string, string>>({ queryKey: ["/api/settings"] });
+
+  const budget = settings?.orderBudget ? parseFloat(settings.orderBudget) : null;
 
   const cartKey = `brasfrut_cart_${user?.id || 0}`;
   const [cart, setCartState] = useState<Record<number, number>>(() => {
@@ -74,7 +77,18 @@ export default function OrderPage() {
   const getSubgroupTotal = (subgroupId: number) =>
     availableProducts.filter(p => p.subgroup_id === subgroupId).reduce((s, p) => s + (cart[p.id] || 0), 0);
 
+  const totalItems = Object.values(cart).reduce((s, q) => s + q, 0);
+  const totalValue = Object.entries(cart).reduce((s, [id, qty]) => {
+    const p = availableProducts.find(p => p.id === parseInt(id));
+    return s + (p ? parseFloat(p.price) * qty : 0);
+  }, 0);
+  const remainingBudget = budget !== null ? budget - totalValue : null;
+
   const canAdd = (product: any) => {
+    if (budget !== null) {
+      const productPrice = parseFloat(product.price);
+      if (productPrice > (remainingBudget ?? 0)) return false;
+    }
     const group = groups.find(g => g.id === product.group_id);
     if (!group) return false;
     if (group.subgroups.length > 0 && product.subgroup_id) {
@@ -96,12 +110,6 @@ export default function OrderPage() {
       return { ...prev, [productId]: next };
     });
   };
-
-  const totalItems = Object.values(cart).reduce((s, q) => s + q, 0);
-  const totalValue = Object.entries(cart).reduce((s, [id, qty]) => {
-    const p = availableProducts.find(p => p.id === parseInt(id));
-    return s + (p ? parseFloat(p.price) * qty : 0);
-  }, 0);
 
   const buildOrderItems = () => {
     return Object.entries(cart).map(([pid, qty]) => {
@@ -201,6 +209,29 @@ export default function OrderPage() {
           </button>
         ))}
       </div>
+
+      {budget !== null && (
+        <div className="mx-4 mt-2" data-testid="budget-bar">
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>Orçamento</span>
+            <span className={remainingBudget !== null && remainingBudget <= 0 ? "text-red-500 font-bold" : "font-semibold"}>
+              R$ {totalValue.toFixed(2).replace(".", ",")} / R$ {budget.toFixed(2).replace(".", ",")}
+            </span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-2.5">
+            <div
+              className={"h-2.5 rounded-full transition-all " + (remainingBudget !== null && remainingBudget <= 0 ? "bg-red-500" : totalValue / budget > 0.8 ? "bg-amber-500" : "bg-green-600")}
+              style={{ width: `${Math.min(100, (totalValue / budget) * 100)}%` }}
+            />
+          </div>
+          {remainingBudget !== null && remainingBudget > 0 && (
+            <p className="text-xs text-gray-400 mt-1">Saldo restante: <span className="font-semibold text-gray-600">R$ {remainingBudget.toFixed(2).replace(".", ",")}</span></p>
+          )}
+          {remainingBudget !== null && remainingBudget <= 0 && (
+            <p className="text-xs text-red-500 font-semibold mt-1">Orçamento atingido</p>
+          )}
+        </div>
+      )}
 
       {groupLimit !== null && groupLimit !== undefined && (
         <div className="mx-4 mt-2">
