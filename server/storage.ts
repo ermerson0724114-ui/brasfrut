@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import {
-  settings, employees, groups, subgroups, products, cycles, orders, orderItems,
+  settings, employees, groups, subgroups, products, cycles, orders, orderItems, auditLogs,
   type Employee, type InsertEmployee,
   type Group, type InsertGroup,
   type Subgroup, type InsertSubgroup,
@@ -9,6 +9,7 @@ import {
   type Cycle, type InsertCycle,
   type Order, type InsertOrder,
   type OrderItem, type InsertOrderItem,
+  type AuditLog, type InsertAuditLog,
 } from "@shared/schema";
 
 export interface GroupWithSubgroups extends Group {
@@ -60,6 +61,9 @@ export interface IStorage {
   createOrder(data: InsertOrder, items: InsertOrderItem[]): Promise<OrderWithItems>;
   updateOrder(id: number, data: Partial<InsertOrder>, items?: InsertOrderItem[]): Promise<OrderWithItems | undefined>;
   deleteOrder(id: number): Promise<void>;
+
+  getAuditLogs(): Promise<AuditLog[]>;
+  createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -269,6 +273,15 @@ export class DatabaseStorage implements IStorage {
   async deleteOrder(id: number): Promise<void> {
     await db.delete(orderItems).where(eq(orderItems.order_id, id));
     await db.delete(orders).where(eq(orders.id, id));
+  }
+
+  async getAuditLogs(): Promise<AuditLog[]> {
+    return db.select().from(auditLogs).orderBy(desc(auditLogs.created_at));
+  }
+
+  async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
+    const rows = await db.insert(auditLogs).values(data).returning();
+    return rows[0];
   }
 }
 

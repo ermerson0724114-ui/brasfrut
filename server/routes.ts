@@ -37,9 +37,22 @@ export async function registerRoutes(
   // --- AUTH ---
   app.post("/api/auth/login", async (req, res) => {
     const { type, username, password } = req.body;
+    const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+
     if (type === "admin") {
       const adminPassword = (await storage.getSetting("adminPassword")) || "admin123";
       if (username === "admin" && password === adminPassword) {
+        await storage.createAuditLog({
+          employee_id: null,
+          employee_name: "Admin",
+          employee_registration: "",
+          action: "login_admin",
+          order_id: null,
+          order_total: null,
+          cycle_reference: "",
+          ip_address: clientIp,
+          details: "Login administrativo realizado",
+        });
         return res.json({ user: { id: 0, name: "Administrador", isAdmin: true }, token: "admin-token" });
       }
       return res.status(401).json({ message: "Credenciais inválidas" });
@@ -54,6 +67,17 @@ export async function registerRoutes(
       const remaining = 5 - attempts;
       if (attempts >= 5) {
         await storage.updateEmployee(emp.id, { failed_attempts: attempts, is_locked: true });
+        await storage.createAuditLog({
+          employee_id: emp.id,
+          employee_name: emp.name,
+          employee_registration: emp.registration_number,
+          action: "conta_bloqueada",
+          order_id: null,
+          order_total: null,
+          cycle_reference: "",
+          ip_address: clientIp,
+          details: `Conta bloqueada após ${attempts} tentativas de login`,
+        });
         return res.status(403).json({ message: "Conta bloqueada por excesso de tentativas. Contate o administrador." });
       }
       await storage.updateEmployee(emp.id, { failed_attempts: attempts });
@@ -62,6 +86,17 @@ export async function registerRoutes(
     if (emp.failed_attempts > 0) {
       await storage.updateEmployee(emp.id, { failed_attempts: 0 });
     }
+    await storage.createAuditLog({
+      employee_id: emp.id,
+      employee_name: emp.name,
+      employee_registration: emp.registration_number,
+      action: "login_funcionario",
+      order_id: null,
+      order_total: null,
+      cycle_reference: "",
+      ip_address: clientIp,
+      details: `Login de funcionário: ${emp.name}`,
+    });
     return res.json({ user: { id: emp.id, name: emp.name, isAdmin: false }, token: "emp-token" });
   });
 
@@ -326,6 +361,17 @@ export async function registerRoutes(
     res.json(os);
   });
 
+  function getClientIp(req: any): string {
+    return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+  }
+
+  async function getCycleReference(cycleId: number): Promise<string> {
+    const cycle = await storage.getCycle(cycleId);
+    if (!cycle) return "";
+    const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    return `${monthNames[cycle.month - 1]}/${cycle.year}`;
+  }
+
   app.post("/api/orders", async (req, res) => {
     const { items, ...orderData } = req.body;
     if (orderData.employee_id && (!orderData.employee_registration || orderData.employee_registration === "")) {
@@ -336,19 +382,73 @@ export async function registerRoutes(
       }
     }
     const order = await storage.createOrder(orderData, items || []);
+
+    const cycleRef = await getCycleReference(order.cycle_id);
+    await storage.createAuditLog({
+      employee_id: order.employee_id,
+      employee_name: order.employee_name,
+      employee_registration: order.employee_registration || "",
+      action: "pedido_criado",
+      order_id: order.id,
+      order_total: order.total,
+      cycle_reference: cycleRef,
+      ip_address: getClientIp(req),
+      details: `Pedido #${order.id} criado com ${order.items.length} item(ns), total R$ ${parseFloat(order.total).toFixed(2)}`,
+    });
+
     res.json(order);
   });
 
   app.patch("/api/orders/:id", async (req, res) => {
     const { items, ...orderData } = req.body;
+    const oldOrder = await storage.getOrder(parseInt(req.params.id));
     const order = await storage.updateOrder(parseInt(req.params.id), orderData, items);
     if (!order) return res.status(404).json({ message: "Não encontrado" });
+
+    const cycleRef = await getCycleReference(order.cycle_id);
+    const isAdminEdit = req.body._adminEdit;
+    const actionUser = isAdminEdit ? "Admin" : order.employee_name;
+    const oldTotal = oldOrder ? parseFloat(oldOrder.total).toFixed(2) : "0.00";
+    const newTotal = parseFloat(order.total).toFixed(2);
+    await storage.createAuditLog({
+      employee_id: order.employee_id,
+      employee_name: actionUser,
+      employee_registration: order.employee_registration || "",
+      action: "pedido_editado",
+      order_id: order.id,
+      order_total: order.total,
+      cycle_reference: cycleRef,
+      ip_address: getClientIp(req),
+      details: `Pedido #${order.id} editado por ${actionUser}. Total: R$ ${oldTotal} → R$ ${newTotal}`,
+    });
+
     res.json(order);
   });
 
   app.delete("/api/orders/:id", async (req, res) => {
+    const order = await storage.getOrder(parseInt(req.params.id));
+    if (order) {
+      const cycleRef = await getCycleReference(order.cycle_id);
+      await storage.createAuditLog({
+        employee_id: order.employee_id,
+        employee_name: order.employee_name,
+        employee_registration: order.employee_registration || "",
+        action: "pedido_excluido",
+        order_id: order.id,
+        order_total: order.total,
+        cycle_reference: cycleRef,
+        ip_address: getClientIp(req),
+        details: `Pedido #${order.id} excluído. Total era R$ ${parseFloat(order.total).toFixed(2)}`,
+      });
+    }
     await storage.deleteOrder(parseInt(req.params.id));
     res.json({ ok: true });
+  });
+
+  // --- AUDIT LOGS ---
+  app.get("/api/audit-logs", async (_req, res) => {
+    const logs = await storage.getAuditLogs();
+    res.json(logs);
   });
 
   // --- BULK MIGRATE (from localStorage) ---

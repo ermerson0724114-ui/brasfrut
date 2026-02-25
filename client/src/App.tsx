@@ -16,6 +16,7 @@ import AdminEmployees from "@/pages/admin/AdminEmployees";
 import AdminGroups from "@/pages/admin/AdminGroups";
 import AdminOrders from "@/pages/admin/AdminOrders";
 import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminLogs from "@/pages/admin/AdminLogs";
 
 function WithEmployeeLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
@@ -56,6 +57,9 @@ function Router() {
       </Route>
       <Route path="/admin/config">
         <WithAdminLayout><AdminSettings /></WithAdminLayout>
+      </Route>
+      <Route path="/admin/logs">
+        <WithAdminLayout><AdminLogs /></WithAdminLayout>
       </Route>
       <Route path="/admin">
         <WithAdminLayout><AdminDashboard /></WithAdminLayout>

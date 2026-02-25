@@ -81,6 +81,22 @@ export const orderItems = pgTable("order_items", {
   unit_price: decimal("unit_price", { precision: 10, scale: 2 }).notNull().default("0.00"),
 });
 
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  employee_id: integer("employee_id"),
+  employee_name: text("employee_name").notNull(),
+  employee_registration: text("employee_registration").default(""),
+  action: varchar("action", { length: 50 }).notNull(),
+  order_id: integer("order_id"),
+  order_total: decimal("order_total", { precision: 10, scale: 2 }),
+  cycle_reference: text("cycle_reference").default(""),
+  ip_address: text("ip_address").default(""),
+  details: text("details").default(""),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, created_at: true });
+
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
 export const insertGroupSchema = createInsertSchema(groups).omit({ id: true });
 export const insertSubgroupSchema = createInsertSchema(subgroups).omit({ id: true });
@@ -103,3 +119,5 @@ export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
