@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Search, ChevronDown, ShoppingBag, Plus, Minus } from "lucide-react";
+import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTHS_FULL } from "@/lib/mockData";
-import type { Product, Cycle } from "@shared/schema";
+import type { Product, Cycle, Employee } from "@shared/schema";
+import * as XLSX from "xlsx";
 
 interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; }
 interface OrderData { id: number; employee_id: number; employee_name: string; employee_registration: string | null; status: string; total: string; cycle_id: number; items: OrderItem[]; }
@@ -18,6 +19,7 @@ export default function AdminOrders() {
   const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
   const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+  const { data: employees = [] } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
 
   const [selectedCycleId, setSelectedCycleId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -66,6 +68,84 @@ export default function AdminOrders() {
     setTimeout(() => { setSaving(false); setEditModal(null); toast({ title: "Pedido atualizado!" }); }, 400);
   };
 
+  const handleExportExcel = () => {
+    if (cycleOrders.length === 0) {
+      toast({ title: "Nenhum pedido para exportar", variant: "destructive" });
+      return;
+    }
+
+    const allGroupNames = new Set<string>();
+    cycleOrders.forEach(o => o.items?.forEach(i => { if (i.group_name_snapshot) allGroupNames.add(i.group_name_snapshot); }));
+    const groupNamesList = Array.from(allGroupNames);
+
+    if (groupNamesList.length === 0) {
+      toast({ title: "Nenhum item nos pedidos", variant: "destructive" });
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    for (const groupName of groupNamesList) {
+      const productNames = new Set<string>();
+      cycleOrders.forEach(o => {
+        o.items?.filter(i => i.group_name_snapshot === groupName).forEach(i => productNames.add(i.product_name_snapshot));
+      });
+      const productList = Array.from(productNames).sort();
+
+      const headers = ["Matrícula", "Nome", "Setor", ...productList, `Total ${groupName}`];
+      const rows: any[][] = [];
+
+      for (const order of cycleOrders) {
+        const emp = employees.find(e => e.id === order.employee_id);
+        const groupItems = order.items?.filter(i => i.group_name_snapshot === groupName) || [];
+        if (groupItems.length === 0) continue;
+
+        const row: any[] = [
+          order.employee_registration || "",
+          order.employee_name || "",
+          emp?.setor || "",
+        ];
+
+        let groupTotal = 0;
+        for (const pName of productList) {
+          const item = groupItems.find(i => i.product_name_snapshot === pName);
+          const qty = item ? item.quantity : 0;
+          row.push(qty > 0 ? qty : "");
+          if (item) groupTotal += parseFloat(item.unit_price) * item.quantity;
+        }
+        row.push(groupTotal);
+        rows.push(row);
+      }
+
+      rows.sort((a, b) => (a[1] as string).localeCompare(b[1] as string));
+
+      const sheetData = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      const totalColIdx = headers.length - 1;
+      for (let r = 1; r < sheetData.length; r++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c: totalColIdx })];
+        if (cell) cell.z = '#,##0.00';
+      }
+
+      const colWidths = headers.map((h, i) => {
+        if (i === 0) return { wch: 12 };
+        if (i === 1) return { wch: 30 };
+        if (i === 2) return { wch: 18 };
+        if (i === totalColIdx) return { wch: 14 };
+        return { wch: Math.max(h.length + 2, 8) };
+      });
+      ws['!cols'] = colWidths;
+
+      const safeSheetName = groupName.substring(0, 31).replace(/[\\/*?\[\]:]/g, "");
+      XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+    }
+
+    const cycleName = selectedCycle ? `${MONTHS_FULL[selectedCycle.month - 1]}_${selectedCycle.year}` : "pedidos";
+    XLSX.writeFile(wb, `Pedidos_${cycleName}.xlsx`);
+    toast({ title: "Planilha exportada com sucesso!", variant: "success" });
+  };
+
   const filtered = cycleOrders.filter(o =>
     o.employee_name?.toLowerCase().includes(search.toLowerCase()) || o.employee_registration?.includes(search)
   );
@@ -84,15 +164,23 @@ export default function AdminOrders() {
             <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center"><ShoppingBag size={20} className="text-green-800" /></div>
             <div><h2 className="text-lg font-extrabold text-gray-800">Pedidos</h2><p className="text-gray-500 text-xs">{cycleOrders.length} pedido(s)</p></div>
           </div>
-          {cycles.length > 0 && (
-            <div className="relative">
-              <select value={activeCycleId ?? ""} onChange={e => setSelectedCycleId(parseInt(e.target.value))}
-                className="appearance-none bg-gray-100 text-gray-800 text-xs rounded-xl px-3 py-2 pr-7 outline-none" data-testid="select-cycle">
-                {cycles.map(c => <option key={c.id} value={c.id}>{MONTHS_FULL[c.month - 1]}/{c.year}</option>)}
-              </select>
-              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportExcel}
+              className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600"
+              title="Exportar Excel"
+              data-testid="button-export-excel">
+              <Download size={16} />
+            </button>
+            {cycles.length > 0 && (
+              <div className="relative">
+                <select value={activeCycleId ?? ""} onChange={e => setSelectedCycleId(parseInt(e.target.value))}
+                  className="appearance-none bg-gray-100 text-gray-800 text-xs rounded-xl px-3 py-2 pr-7 outline-none" data-testid="select-cycle">
+                  {cycles.map(c => <option key={c.id} value={c.id}>{MONTHS_FULL[c.month - 1]}/{c.year}</option>)}
+                </select>
+                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            )}
+          </div>
         </div>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
