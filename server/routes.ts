@@ -163,6 +163,52 @@ export async function registerRoutes(
   });
 
   // --- CYCLES ---
+  function getLastDayOfMonth(year: number, month: number): number {
+    return new Date(year, month, 0).getDate();
+  }
+
+  app.get("/api/cycle/current", async (_req, res) => {
+    const now = new Date();
+    const day = now.getDate();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const lastDay = getLastDayOfMonth(year, month);
+
+    const isOpen = day >= 15;
+
+    const cycleMonth = month;
+    const cycleYear = year;
+
+    const allCycles = await storage.getCycles();
+    let cycle = allCycles.find(c => c.month === cycleMonth && c.year === cycleYear);
+
+    if (!cycle) {
+      cycle = await storage.createCycle({
+        month: cycleMonth,
+        year: cycleYear,
+        start_date: `${cycleYear}-${String(cycleMonth).padStart(2, "0")}-15T00:00:00`,
+        end_date: `${cycleYear}-${String(cycleMonth).padStart(2, "0")}-${lastDay}T23:59:59`,
+        status: isOpen ? "open" : "closed",
+      });
+    } else {
+      const newStatus = isOpen ? "open" : "closed";
+      if (cycle.status !== newStatus) {
+        cycle = (await storage.updateCycle(cycle.id, { status: newStatus }))!;
+      }
+    }
+
+    let daysRemaining = 0;
+    let daysUntilOpen = 0;
+
+    if (isOpen) {
+      daysRemaining = lastDay - day;
+    } else {
+      daysUntilOpen = 15 - day;
+    }
+
+    res.json({ cycle, isOpen, daysRemaining, daysUntilOpen });
+  });
+
   app.get("/api/cycles", async (_req, res) => {
     const cs = await storage.getCycles();
     res.json(cs);

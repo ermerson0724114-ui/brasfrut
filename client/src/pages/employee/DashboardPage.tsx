@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { CheckCircle, Clock, AlertTriangle, Lock } from "lucide-react";
+import { CheckCircle, Clock, AlertTriangle, Lock, CalendarClock } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useQuery } from "@tanstack/react-query";
-import { MONTHS } from "@/lib/mockData";
+import { MONTHS, MONTHS_FULL } from "@/lib/mockData";
 import type { Cycle } from "@shared/schema";
 
 interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; }
 interface OrderData { id: number; employee_id: number; employee_name: string; status: string; total: string; cycle_id: number; items: OrderItem[]; }
 interface GroupData { id: number; name: string; subgroups: { id: number; name: string; item_limit: number | null }[]; }
+interface CurrentCycleData { cycle: Cycle; isOpen: boolean; daysRemaining: number; daysUntilOpen: number; }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   draft:     { label: "Em edição",    color: "bg-amber-50 text-amber-700 border border-amber-200",  icon: Clock },
@@ -22,13 +23,18 @@ export default function DashboardPage() {
   const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
   const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
   const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
+  const { data: currentCycleData } = useQuery<CurrentCycleData>({ queryKey: ["/api/cycle/current"] });
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
 
-  const myOrders = orders.filter(o => o.employee_id === user?.id);
-  const activeCycle = cycles.find(c => c.status === "open");
-  const currentOrder = myOrders.find(o => o.cycle_id === activeCycle?.id);
+  const activeCycle = currentCycleData?.cycle;
+  const isOpen = currentCycleData?.isOpen ?? false;
+  const daysRemaining = currentCycleData?.daysRemaining ?? 0;
+  const daysUntilOpen = currentCycleData?.daysUntilOpen ?? 0;
 
-  const orderStatus = activeCycle?.status === "closed" ? "closed"
+  const myOrders = orders.filter(o => o.employee_id === user?.id);
+  const currentOrder = activeCycle ? myOrders.find(o => o.cycle_id === activeCycle.id) : undefined;
+
+  const orderStatus = !isOpen ? "closed"
     : currentOrder?.status === "confirmed" ? "confirmed"
     : currentOrder?.status === "draft" ? "draft"
     : "none";
@@ -36,13 +42,10 @@ export default function DashboardPage() {
   const statusCfg = STATUS_CONFIG[orderStatus];
   const StatusIcon = statusCfg.icon;
 
-  const now = new Date();
   const endDate = activeCycle ? new Date(activeCycle.end_date) : null;
-  const isPastDeadline = endDate ? now > endDate : false;
-
   const deadlineText = endDate
     ? endDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-    : "Sem ciclo ativo";
+    : "—";
 
   const chartData = MONTHS.map((label, i) => {
     const monthOrders = myOrders.filter(o => {
@@ -55,10 +58,29 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {isPastDeadline && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
-          <Lock size={18} className="text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700 font-semibold">Prazo encerrado. Pedidos fechados.</p>
+      {isOpen ? (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3" data-testid="banner-cycle-open">
+          <CalendarClock size={20} className="text-green-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-green-800">
+              Pedidos abertos — {daysRemaining} {daysRemaining === 1 ? "dia restante" : "dias restantes"}
+            </p>
+            <p className="text-xs text-green-600 mt-0.5">
+              {activeCycle ? `${MONTHS_FULL[activeCycle.month - 1]} / ${activeCycle.year}` : ""} · Encerra em {deadlineText}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3" data-testid="banner-cycle-closed">
+          <Lock size={20} className="text-red-500 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-700">
+              Pedidos fechados — abre em {daysUntilOpen} {daysUntilOpen === 1 ? "dia" : "dias"}
+            </p>
+            <p className="text-xs text-red-500 mt-0.5">
+              Período de pedidos: dia 15 ao último dia do mês
+            </p>
+          </div>
         </div>
       )}
 

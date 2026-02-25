@@ -9,6 +9,7 @@ import type { Product, Cycle } from "@shared/schema";
 interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; order_id: number; }
 interface OrderData { id: number; employee_id: number; employee_name: string; employee_registration: string | null; status: string; total: string; cycle_id: number; items: OrderItem[]; }
 interface GroupData { id: number; name: string; item_limit: number | null; subgroups: { id: number; name: string; item_limit: number | null }[]; }
+interface CurrentCycleData { cycle: Cycle; isOpen: boolean; daysRemaining: number; daysUntilOpen: number; }
 
 export default function OrderPage() {
   const { user } = useAuthStore();
@@ -17,7 +18,7 @@ export default function OrderPage() {
   const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
-  const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
+  const { data: currentCycleData } = useQuery<CurrentCycleData>({ queryKey: ["/api/cycle/current"] });
 
   const [cart, setCart] = useState<Record<number, number>>({});
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
@@ -26,11 +27,10 @@ export default function OrderPage() {
   const [showTerm, setShowTerm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const activeCycle = cycles.find(c => c.status === "open");
-  const isPastDeadline = activeCycle ? new Date() > new Date(activeCycle.end_date) : false;
-  const isClosed = activeCycle ? isPastDeadline || activeCycle.status === "closed" : false;
-  const existingOrder = orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle?.id);
-  const noCycle = !activeCycle;
+  const activeCycle = currentCycleData?.cycle;
+  const isOpen = currentCycleData?.isOpen ?? false;
+  const isClosed = !isOpen;
+  const existingOrder = activeCycle ? orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle.id) : undefined;
 
   const createOrder = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/orders", data),
@@ -228,7 +228,7 @@ export default function OrderPage() {
                     product={product}
                     qty={cart[product.id] || 0}
                     canAdd={canAdd(product)}
-                    isClosed={isClosed && !noCycle}
+                    isClosed={isClosed}
                     onAdd={() => setQty(product.id, 1)}
                     onRemove={() => setQty(product.id, -1)}
                   />
@@ -248,7 +248,7 @@ export default function OrderPage() {
                 product={product}
                 qty={cart[product.id] || 0}
                 canAdd={canAdd(product)}
-                isClosed={isClosed && !noCycle}
+                isClosed={isClosed}
                 onAdd={() => setQty(product.id, 1)}
                 onRemove={() => setQty(product.id, -1)}
               />
@@ -271,10 +271,8 @@ export default function OrderPage() {
               R$ {totalValue.toFixed(2).replace(".", ",")}
             </span>
           </div>
-          {noCycle ? (
-            <p className="text-center text-sm text-amber-600 font-semibold py-2">Nenhum ciclo aberto no momento. Aguarde o administrador abrir um ciclo.</p>
-          ) : isClosed ? (
-            <p className="text-center text-sm text-red-500 font-semibold py-2">Ciclo encerrado. Pedidos fechados.</p>
+          {isClosed ? (
+            <p className="text-center text-sm text-red-500 font-semibold py-2">Período fechado (dia 1 a 14). Aguarde o dia 15 para confirmar pedidos.</p>
           ) : (
             <button
               onClick={() => setShowTerm(true)}
