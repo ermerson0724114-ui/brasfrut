@@ -49,7 +49,19 @@ export async function registerRoutes(
     if (emp.status === "inactive") return res.status(403).json({ message: "Funcionário desligado. Contate o administrador." });
     if (emp.is_locked) return res.status(403).json({ message: "Conta bloqueada. Contate o administrador." });
     if (!emp.password) return res.json({ needsPassword: true, employeeId: emp.id });
-    if (emp.password !== password) return res.status(401).json({ message: "Senha incorreta" });
+    if (emp.password !== password) {
+      const attempts = (emp.failed_attempts || 0) + 1;
+      const remaining = 5 - attempts;
+      if (attempts >= 5) {
+        await storage.updateEmployee(emp.id, { failed_attempts: attempts, is_locked: true });
+        return res.status(403).json({ message: "Conta bloqueada por excesso de tentativas. Contate o administrador." });
+      }
+      await storage.updateEmployee(emp.id, { failed_attempts: attempts });
+      return res.status(401).json({ message: `Senha incorreta. ${remaining} tentativa(s) restante(s).` });
+    }
+    if (emp.failed_attempts > 0) {
+      await storage.updateEmployee(emp.id, { failed_attempts: 0 });
+    }
     return res.json({ user: { id: emp.id, name: emp.name, isAdmin: false }, token: "emp-token" });
   });
 

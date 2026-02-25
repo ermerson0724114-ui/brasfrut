@@ -108,8 +108,8 @@ export default function AdminEmployees() {
   };
 
   const handleUnlock = (id: number) => {
-    updateMut.mutate({ id, data: { is_locked: false } });
-    toast({ title: "Funcionário desbloqueado" });
+    updateMut.mutate({ id, data: { is_locked: false, failed_attempts: 0 } });
+    toast({ title: "Funcionário desbloqueado", variant: "success" });
   };
 
   const handleChangePassword = () => {
