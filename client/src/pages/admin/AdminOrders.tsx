@@ -115,8 +115,8 @@ export default function AdminOrders() {
         if (groupItems.length === 0) continue;
 
         const row: any[] = [
-          order.employee_registration || "",
-          order.employee_name || "",
+          order.employee_registration || emp?.registration_number || "",
+          order.employee_name || emp?.name || "",
           emp?.setor || "",
         ];
 

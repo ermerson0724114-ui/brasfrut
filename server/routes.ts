@@ -328,6 +328,13 @@ export async function registerRoutes(
 
   app.post("/api/orders", async (req, res) => {
     const { items, ...orderData } = req.body;
+    if (orderData.employee_id && (!orderData.employee_registration || orderData.employee_registration === "")) {
+      const emp = await storage.getEmployee(orderData.employee_id);
+      if (emp) {
+        orderData.employee_registration = emp.registration_number;
+        if (!orderData.employee_name) orderData.employee_name = emp.name;
+      }
+    }
     const order = await storage.createOrder(orderData, items || []);
     res.json(order);
   });
