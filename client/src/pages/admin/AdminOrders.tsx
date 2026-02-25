@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download, Trash2 } from "lucide-react";
+import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download, Trash2, Eye, Edit2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -24,6 +24,7 @@ export default function AdminOrders() {
   const [selectedCycleId, setSelectedCycleId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [editModal, setEditModal] = useState<OrderData | null>(null);
+  const [viewModal, setViewModal] = useState<OrderData | null>(null);
   const [cart, setCart] = useState<Record<number, number>>({});
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
   const [saving, setSaving] = useState(false);
@@ -213,11 +214,12 @@ export default function AdminOrders() {
                 <p className="font-semibold text-gray-800 text-sm">{order.employee_name}</p>
                 <p className="text-xs text-gray-500">{order.employee_registration} · {order.items?.length} item(s)</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className={"text-xs font-bold px-2 py-0.5 rounded-full " + (order.status === "confirmed" ? "bg-green-100 text-green-700" : order.status === "closed" ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700")}>
                   {STATUS_LABELS[order.status] || order.status}</span>
                 <button onClick={() => setDeleteOrderId(order.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" data-testid={`button-delete-order-${order.id}`}><Trash2 size={14} /></button>
-                <button onClick={() => openEdit(order)} className="text-xs bg-green-900 text-white px-3 py-1.5 rounded-xl font-semibold" data-testid={`button-view-order-${order.id}`}>Ver</button>
+                <button onClick={() => setViewModal(order)} className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600" title="Ver" data-testid={`button-view-order-${order.id}`}><Eye size={14} /></button>
+                <button onClick={() => openEdit(order)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-700" title="Editar" data-testid={`button-edit-order-${order.id}`}><Edit2 size={14} /></button>
               </div>
             </div>
             <p className="text-sm font-extrabold text-green-900">R$ {parseFloat(order.total).toFixed(2).replace(".", ",")}</p>
@@ -238,11 +240,77 @@ export default function AdminOrders() {
         </div>
       )}
 
+      {viewModal && (() => {
+        const groupedItems = new Map<string, OrderItem[]>();
+        viewModal.items?.forEach(item => {
+          const key = item.group_name_snapshot || "Outros";
+          if (!groupedItems.has(key)) groupedItems.set(key, []);
+          groupedItems.get(key)!.push(item);
+        });
+        const groupEntries = Array.from(groupedItems.entries());
+        const emp = employees.find(e => e.id === viewModal.employee_id);
+        const grandTotal = parseFloat(viewModal.total || "0");
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+            <div className="w-full max-w-2xl bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "92vh" }}>
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0 border-b border-gray-100">
+                <div>
+                  <h2 className="font-extrabold text-lg" data-testid="text-view-order-name">{viewModal.employee_name}</h2>
+                  <p className="text-xs text-gray-500">{viewModal.employee_registration || emp?.registration_number} · {emp?.setor || ""}</p>
+                </div>
+                <button onClick={() => setViewModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><span className="text-gray-600 text-lg leading-none">✕</span></button>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {groupEntries.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400"><p className="text-sm">Nenhum item no pedido</p></div>
+                ) : groupEntries.map(([groupName, items], gi) => {
+                  const subtotal = items.reduce((s, i) => s + parseFloat(i.unit_price) * i.quantity, 0);
+                  return (
+                    <div key={groupName}>
+                      <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-100">
+                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">{groupName}</p>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {items.map(item => (
+                          <div key={item.id} className="px-5 py-3 flex items-center justify-between" data-testid={`view-item-${item.id}`}>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-800">{item.product_name_snapshot}</p>
+                              {item.subgroup_name_snapshot && <p className="text-xs text-gray-400">{item.subgroup_name_snapshot}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-gray-800">{item.quantity}x</p>
+                              <p className="text-xs text-gray-500">R$ {(parseFloat(item.unit_price) * item.quantity).toFixed(2).replace(".", ",")}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="px-5 py-2 bg-gray-50/60 flex justify-between border-t border-gray-100">
+                        <p className="text-xs font-semibold text-gray-500">Subtotal {groupName}</p>
+                        <p className="text-xs font-bold text-gray-700">R$ {subtotal.toFixed(2).replace(".", ",")}</p>
+                      </div>
+                      {gi < groupEntries.length - 1 && <div className="border-b border-gray-100" />}
+                    </div>
+                  );
+                })}
+                <div className="px-5 py-4 border-t border-gray-200 flex justify-between bg-green-50/50">
+                  <p className="font-bold text-gray-700">Total Geral</p>
+                  <p className="font-extrabold text-green-900 text-lg" data-testid="text-view-order-total">R$ {grandTotal.toFixed(2).replace(".", ",")}</p>
+                </div>
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
+                <button onClick={() => setViewModal(null)} className="w-full py-3.5 bg-gray-100 text-gray-700 rounded-2xl font-semibold" data-testid="button-close-view-order">Fechar</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {editModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="w-full max-w-2xl bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "92vh" }}>
             <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-              <div><h2 className="font-extrabold text-lg">{editModal.employee_name}</h2><p className="text-xs text-gray-500">{isClosed ? "Somente leitura" : "Editar pedido"}</p></div>
+              <div><h2 className="font-extrabold text-lg">{editModal.employee_name}</h2><p className="text-xs text-gray-500">Editar pedido</p></div>
               <button onClick={() => setEditModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><span className="text-gray-600 text-lg leading-none">✕</span></button>
             </div>
             {groups.length > 0 && (
@@ -260,23 +328,19 @@ export default function AdminOrders() {
                 return (
                   <div key={product.id} className="flex items-center py-2.5 gap-3 border-b border-gray-50">
                     <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">R$ {parseFloat(product.price).toFixed(2).replace(".", ",")} / {product.unit}</p></div>
-                    {!isClosed ? (
-                      <div className="flex items-center gap-2">
-                        {qty > 0 && <button onClick={() => setQty(product.id, -1)} className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center"><Minus size={12} /></button>}
-                        {qty > 0 && <span className="font-bold text-gray-800 w-4 text-center text-sm">{qty}</span>}
-                        <button onClick={() => setQty(product.id, 1)} className={"w-7 h-7 rounded-full flex items-center justify-center " + (qty > 0 ? "bg-green-900 text-white" : "bg-green-100 text-green-800")}><Plus size={12} /></button>
-                      </div>
-                    ) : qty > 0 ? <span className="text-sm font-bold text-gray-700">{qty}x</span> : null}
+                    <div className="flex items-center gap-2">
+                      {qty > 0 && <button onClick={() => setQty(product.id, -1)} className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center"><Minus size={12} /></button>}
+                      {qty > 0 && <span className="font-bold text-gray-800 w-4 text-center text-sm">{qty}</span>}
+                      <button onClick={() => setQty(product.id, 1)} className={"w-7 h-7 rounded-full flex items-center justify-center " + (qty > 0 ? "bg-green-900 text-white" : "bg-green-100 text-green-800")}><Plus size={12} /></button>
+                    </div>
                   </div>
                 );
               })}
             </div>
-            {!isClosed && (
-              <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
-                <div className="flex justify-between mb-3"><span className="font-bold text-gray-700">Total</span><span className="font-extrabold text-green-900">R$ {totalValue.toFixed(2).replace(".", ",")}</span></div>
-                <button onClick={handleSaveEdit} disabled={saving} className="w-full py-3.5 bg-green-900 text-white rounded-2xl font-bold disabled:opacity-60" data-testid="button-save-admin-order">{saving ? "Salvando..." : "Salvar Pedido"}</button>
-              </div>
-            )}
+            <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
+              <div className="flex justify-between mb-3"><span className="font-bold text-gray-700">Total</span><span className="font-extrabold text-green-900">R$ {totalValue.toFixed(2).replace(".", ",")}</span></div>
+              <button onClick={handleSaveEdit} disabled={saving} className="w-full py-3.5 bg-green-900 text-white rounded-2xl font-bold disabled:opacity-60" data-testid="button-save-admin-order">{saving ? "Salvando..." : "Salvar Pedido"}</button>
+            </div>
           </div>
         </div>
       )}
