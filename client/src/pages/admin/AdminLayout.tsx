@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Users, Package, ShoppingBag, LogOut, Layers, CalendarClock, Settings } from "lucide-react";
-import { useAuthStore, useSettingsStore } from "@/lib/store";
+import { useAuthStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
 
 const tabs = [
   { path: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -18,8 +19,9 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { logout } = useAuthStore();
-  const { companyName } = useSettingsStore();
   const [location, navigate] = useLocation();
+  const { data: settings } = useQuery<Record<string, string>>({ queryKey: ["/api/settings"] });
+  const companyName = settings?.companyName || "Brasfrut";
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 max-w-2xl mx-auto">

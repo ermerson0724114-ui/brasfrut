@@ -1,17 +1,23 @@
 import { useState, useEffect } from "react";
 import { Plus, Minus, ShoppingCart, CheckCircle, Leaf } from "lucide-react";
-import { useAuthStore, useDataStore, type Order, type OrderItem } from "@/lib/store";
+import { useAuthStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Product, Cycle } from "@shared/schema";
+
+interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; order_id: number; }
+interface OrderData { id: number; employee_id: number; employee_name: string; employee_registration: string | null; status: string; total: string; cycle_id: number; items: OrderItem[]; }
+interface GroupData { id: number; name: string; item_limit: number | null; subgroups: { id: number; name: string; item_limit: number | null }[]; }
 
 export default function OrderPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const groups = useDataStore(s => s.groups);
-  const products = useDataStore(s => s.products);
-  const orders = useDataStore(s => s.orders);
-  const cycles = useDataStore(s => s.cycles);
-  const addOrder = useDataStore(s => s.addOrder);
-  const updateOrder = useDataStore(s => s.updateOrder);
+
+  const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
+  const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+  const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
+  const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
 
   const [cart, setCart] = useState<Record<number, number>>({});
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
@@ -24,6 +30,15 @@ export default function OrderPage() {
   const isClosed = !activeCycle || (activeCycle && new Date() > new Date(activeCycle.end_date));
   const existingOrder = orders.find(o => o.employee_id === user?.id && o.cycle_id === activeCycle?.id);
 
+  const createOrder = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/orders", data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+  });
+  const updateOrder = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/orders/${id}`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+  });
+
   useEffect(() => {
     if (groups.length > 0 && selectedGroup === 0) setSelectedGroup(groups[0].id);
   }, [groups, selectedGroup]);
@@ -31,7 +46,7 @@ export default function OrderPage() {
   useEffect(() => {
     if (existingOrder) {
       const cartObj: Record<number, number> = {};
-      existingOrder.items.forEach(i => { cartObj[i.product_id] = i.quantity; });
+      existingOrder.items?.forEach(i => { cartObj[i.product_id] = i.quantity; });
       setCart(cartObj);
       setSubmitted(existingOrder.status === "confirmed");
     }
@@ -74,13 +89,12 @@ export default function OrderPage() {
     return s + (p ? parseFloat(p.price) * qty : 0);
   }, 0);
 
-  const buildOrderItems = (): OrderItem[] => {
+  const buildOrderItems = () => {
     return Object.entries(cart).map(([pid, qty]) => {
       const p = products.find(pr => pr.id === parseInt(pid));
       const g = groups.find(gr => gr.id === p?.group_id);
       const sub = g?.subgroups.find(s => s.id === p?.subgroup_id);
       return {
-        id: Date.now() + Math.random(),
         product_id: parseInt(pid),
         quantity: qty,
         product_name_snapshot: p?.name || "",
@@ -91,18 +105,17 @@ export default function OrderPage() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!agreed) return toast({ title: "Aceite o termo para confirmar", variant: "destructive" });
     if (totalItems === 0) return toast({ title: "Adicione pelo menos um produto", variant: "destructive" });
     if (!activeCycle || !user) return;
     setSubmitting(true);
-    setTimeout(() => {
-      const items = buildOrderItems();
+    const items = buildOrderItems();
+    try {
       if (existingOrder) {
-        updateOrder(existingOrder.id, { items, total: totalValue.toFixed(2), status: "confirmed" });
+        await updateOrder.mutateAsync({ id: existingOrder.id, data: { items, total: totalValue.toFixed(2), status: "confirmed" } });
       } else {
-        const newOrder: Order = {
-          id: Date.now(),
+        await createOrder.mutateAsync({
           employee_id: user.id,
           employee_name: user.name,
           employee_registration: "",
@@ -110,22 +123,23 @@ export default function OrderPage() {
           total: totalValue.toFixed(2),
           cycle_id: activeCycle.id,
           items,
-        };
-        addOrder(newOrder);
+        });
       }
       setSubmitted(true);
       setShowTerm(false);
-      setSubmitting(false);
       toast({ title: "Pedido confirmado com sucesso!" });
-    }, 800);
+    } catch {
+      toast({ title: "Erro ao salvar pedido", variant: "destructive" });
+    }
+    setSubmitting(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     setCart({});
     setSubmitted(false);
     setAgreed(false);
     if (existingOrder) {
-      updateOrder(existingOrder.id, { items: [], total: "0.00", status: "draft" });
+      await updateOrder.mutateAsync({ id: existingOrder.id, data: { items: [], total: "0.00", status: "draft" } });
     }
     toast({ title: "Pedido excluído" });
   };

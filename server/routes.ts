@@ -6,11 +6,276 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  // --- SETTINGS ---
+  app.get("/api/settings", async (_req, res) => {
+    const s = await storage.getAllSettings();
+    if (!s.adminPassword) {
+      await storage.setSetting("adminPassword", "admin123");
+      s.adminPassword = "admin123";
+    }
+    if (!s.recoveryEmail) {
+      await storage.setSetting("recoveryEmail", "ermerson0724114@gmail.com");
+      s.recoveryEmail = "ermerson0724114@gmail.com";
+    }
+    if (!s.companyName) {
+      await storage.setSetting("companyName", "Brasfrut");
+      s.companyName = "Brasfrut";
+    }
+    res.json(s);
+  });
+
+  app.patch("/api/settings", async (req, res) => {
+    const updates = req.body as Record<string, string>;
+    for (const [key, value] of Object.entries(updates)) {
+      await storage.setSetting(key, value);
+    }
+    const all = await storage.getAllSettings();
+    res.json(all);
+  });
+
+  // --- AUTH ---
+  app.post("/api/auth/login", async (req, res) => {
+    const { type, username, password } = req.body;
+    if (type === "admin") {
+      const adminPassword = (await storage.getSetting("adminPassword")) || "admin123";
+      if (username === "admin" && password === adminPassword) {
+        return res.json({ user: { id: 0, name: "Administrador", isAdmin: true }, token: "admin-token" });
+      }
+      return res.status(401).json({ message: "Credenciais inválidas" });
+    }
+    const emp = await storage.getEmployeeByRegistration(username);
+    if (!emp) return res.status(401).json({ message: "Matrícula não encontrada" });
+    if (emp.is_locked) return res.status(403).json({ message: "Conta bloqueada. Contate o administrador." });
+    if (!emp.password) return res.json({ needsPassword: true, employeeId: emp.id });
+    if (emp.password !== password) return res.status(401).json({ message: "Senha incorreta" });
+    return res.json({ user: { id: emp.id, name: emp.name, isAdmin: false }, token: "emp-token" });
+  });
+
+  app.post("/api/auth/recover", async (req, res) => {
+    const { email } = req.body;
+    const recoveryEmail = (await storage.getSetting("recoveryEmail")) || "ermerson0724114@gmail.com";
+    if (email.trim().toLowerCase() === recoveryEmail.toLowerCase()) {
+      const adminPassword = (await storage.getSetting("adminPassword")) || "admin123";
+      return res.json({ password: adminPassword });
+    }
+    return res.status(403).json({ message: "Email não autorizado para recuperação" });
+  });
+
+  app.post("/api/auth/create-password", async (req, res) => {
+    const { employeeId, password } = req.body;
+    const emp = await storage.updateEmployee(employeeId, { password });
+    if (!emp) return res.status(404).json({ message: "Funcionário não encontrado" });
+    return res.json({ user: { id: emp.id, name: emp.name, isAdmin: false }, token: "emp-token" });
+  });
+
+  // --- EMPLOYEES ---
+  app.get("/api/employees", async (_req, res) => {
+    const emps = await storage.getEmployees();
+    res.json(emps);
+  });
+
+  app.post("/api/employees", async (req, res) => {
+    const emp = await storage.createEmployee(req.body);
+    res.json(emp);
+  });
+
+  app.patch("/api/employees/:id", async (req, res) => {
+    const emp = await storage.updateEmployee(parseInt(req.params.id), req.body);
+    if (!emp) return res.status(404).json({ message: "Não encontrado" });
+    res.json(emp);
+  });
+
+  app.delete("/api/employees/:id", async (req, res) => {
+    await storage.deleteEmployee(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/employees/bulk", async (req, res) => {
+    const list = req.body as any[];
+    const created = [];
+    for (const item of list) {
+      const emp = await storage.createEmployee(item);
+      created.push(emp);
+    }
+    res.json(created);
+  });
+
+  // --- GROUPS ---
+  app.get("/api/groups", async (_req, res) => {
+    const gs = await storage.getGroups();
+    res.json(gs);
+  });
+
+  app.post("/api/groups", async (req, res) => {
+    const g = await storage.createGroup(req.body);
+    res.json(g);
+  });
+
+  app.patch("/api/groups/:id", async (req, res) => {
+    const g = await storage.updateGroup(parseInt(req.params.id), req.body);
+    if (!g) return res.status(404).json({ message: "Não encontrado" });
+    res.json(g);
+  });
+
+  app.delete("/api/groups/:id", async (req, res) => {
+    await storage.deleteGroup(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // --- SUBGROUPS ---
+  app.post("/api/subgroups", async (req, res) => {
+    const s = await storage.createSubgroup(req.body);
+    res.json(s);
+  });
+
+  app.patch("/api/subgroups/:id", async (req, res) => {
+    const s = await storage.updateSubgroup(parseInt(req.params.id), req.body);
+    if (!s) return res.status(404).json({ message: "Não encontrado" });
+    res.json(s);
+  });
+
+  app.delete("/api/subgroups/:id", async (req, res) => {
+    await storage.deleteSubgroup(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // --- PRODUCTS ---
+  app.get("/api/products", async (_req, res) => {
+    const ps = await storage.getProducts();
+    res.json(ps);
+  });
+
+  app.post("/api/products", async (req, res) => {
+    const p = await storage.createProduct(req.body);
+    res.json(p);
+  });
+
+  app.patch("/api/products/:id", async (req, res) => {
+    const p = await storage.updateProduct(parseInt(req.params.id), req.body);
+    if (!p) return res.status(404).json({ message: "Não encontrado" });
+    res.json(p);
+  });
+
+  app.delete("/api/products/:id", async (req, res) => {
+    await storage.deleteProduct(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // --- CYCLES ---
+  app.get("/api/cycles", async (_req, res) => {
+    const cs = await storage.getCycles();
+    res.json(cs);
+  });
+
+  app.post("/api/cycles", async (req, res) => {
+    const c = await storage.createCycle(req.body);
+    res.json(c);
+  });
+
+  app.patch("/api/cycles/:id", async (req, res) => {
+    const c = await storage.updateCycle(parseInt(req.params.id), req.body);
+    if (!c) return res.status(404).json({ message: "Não encontrado" });
+    res.json(c);
+  });
+
+  // --- ORDERS ---
+  app.get("/api/orders", async (_req, res) => {
+    const os = await storage.getOrders();
+    res.json(os);
+  });
+
+  app.get("/api/orders/cycle/:cycleId", async (req, res) => {
+    const os = await storage.getOrdersByCycle(parseInt(req.params.cycleId));
+    res.json(os);
+  });
+
+  app.get("/api/orders/employee/:employeeId", async (req, res) => {
+    const os = await storage.getOrdersByEmployee(parseInt(req.params.employeeId));
+    res.json(os);
+  });
+
+  app.post("/api/orders", async (req, res) => {
+    const { items, ...orderData } = req.body;
+    const order = await storage.createOrder(orderData, items || []);
+    res.json(order);
+  });
+
+  app.patch("/api/orders/:id", async (req, res) => {
+    const { items, ...orderData } = req.body;
+    const order = await storage.updateOrder(parseInt(req.params.id), orderData, items);
+    if (!order) return res.status(404).json({ message: "Não encontrado" });
+    res.json(order);
+  });
+
+  // --- BULK MIGRATE (from localStorage) ---
+  app.post("/api/migrate", async (req, res) => {
+    const { employees: emps, groups: grps, products: prods, cycles: cycs, orders: ords, settings: sets } = req.body;
+    const idMap: Record<string, Record<number, number>> = { groups: {}, subgroups: {}, employees: {}, cycles: {}, products: {} };
+
+    if (sets) {
+      for (const [key, value] of Object.entries(sets)) {
+        await storage.setSetting(key, String(value));
+      }
+    }
+
+    if (emps) {
+      for (const emp of emps) {
+        const { id, ...data } = emp;
+        const created = await storage.createEmployee(data);
+        idMap.employees[id] = created.id;
+      }
+    }
+
+    if (grps) {
+      for (const grp of grps) {
+        const { id, subgroups: subs, ...data } = grp;
+        const created = await storage.createGroup(data);
+        idMap.groups[id] = created.id;
+        if (subs) {
+          for (const sub of subs) {
+            const { id: subId, ...subData } = sub;
+            const createdSub = await storage.createSubgroup({ ...subData, group_id: created.id });
+            idMap.subgroups[subId] = createdSub.id;
+          }
+        }
+      }
+    }
+
+    if (prods) {
+      for (const prod of prods) {
+        const { id, ...data } = prod;
+        const newGroupId = idMap.groups[data.group_id] || data.group_id;
+        const newSubgroupId = data.subgroup_id ? (idMap.subgroups[data.subgroup_id] || data.subgroup_id) : null;
+        const created = await storage.createProduct({ ...data, group_id: newGroupId, subgroup_id: newSubgroupId });
+        idMap.products[id] = created.id;
+      }
+    }
+
+    if (cycs) {
+      for (const cyc of cycs) {
+        const { id, ...data } = cyc;
+        const created = await storage.createCycle(data);
+        idMap.cycles[id] = created.id;
+      }
+    }
+
+    if (ords) {
+      for (const ord of ords) {
+        const { id, items, ...data } = ord;
+        const newEmpId = idMap.employees[data.employee_id] || data.employee_id;
+        const newCycleId = idMap.cycles[data.cycle_id] || data.cycle_id;
+        const mappedItems = (items || []).map((item: any) => {
+          const { id: itemId, ...itemData } = item;
+          const newProductId = idMap.products[itemData.product_id] || itemData.product_id;
+          return { ...itemData, product_id: newProductId, order_id: 0 };
+        });
+        await storage.createOrder({ ...data, employee_id: newEmpId, cycle_id: newCycleId }, mappedItems);
+      }
+    }
+
+    res.json({ ok: true, message: "Dados migrados com sucesso!" });
+  });
 
   return httpServer;
 }

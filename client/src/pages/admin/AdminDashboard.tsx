@@ -1,17 +1,30 @@
 import { useState } from "react";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Users, ShoppingBag, DollarSign, Package } from "lucide-react";
-import { useDataStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
 import { MONTHS } from "@/lib/mockData";
+import type { Employee, Product, Cycle } from "@shared/schema";
+
+interface OrderWithItems {
+  id: number; employee_id: number; employee_name: string; employee_registration: string | null;
+  status: string; total: string; cycle_id: number;
+  items: { id: number; product_id: number; quantity: number; product_name_snapshot: string;
+    group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string }[];
+}
+
+interface GroupWithSubs {
+  id: number; name: string; description: string | null; item_limit: number | null; sort_order: number;
+  subgroups: { id: number; group_id: number; name: string; item_limit: number | null }[];
+}
 
 const years = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i);
 
 export default function AdminDashboard() {
-  const employees = useDataStore(s => s.employees);
-  const products = useDataStore(s => s.products);
-  const orders = useDataStore(s => s.orders);
-  const groups = useDataStore(s => s.groups);
-  const cycles = useDataStore(s => s.cycles);
+  const { data: employees = [] } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
+  const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+  const { data: orders = [] } = useQuery<OrderWithItems[]>({ queryKey: ["/api/orders"] });
+  const { data: groups = [] } = useQuery<GroupWithSubs[]>({ queryKey: ["/api/groups"] });
+  const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
@@ -49,9 +62,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 gap-3">
         {cards.map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="bg-white rounded-2xl p-4 shadow-sm" data-testid={`card-stat-${label.toLowerCase().replace(/\s/g, "-")}`}>
-            <div className={"w-10 h-10 rounded-xl flex items-center justify-center mb-3 " + color}>
-              <Icon size={20} />
-            </div>
+            <div className={"w-10 h-10 rounded-xl flex items-center justify-center mb-3 " + color}><Icon size={20} /></div>
             <p className="text-2xl font-extrabold text-gray-800">{value}</p>
             <p className="text-xs text-gray-500 mt-0.5 font-medium">{label}</p>
           </div>
@@ -62,20 +73,12 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h2 className="font-bold text-gray-800 text-sm">Visão Anual</h2>
           <div className="flex gap-2">
-            <select
-              value={selectedYear}
-              onChange={e => setSelectedYear(parseInt(e.target.value))}
-              className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 outline-none focus:ring-2 focus:ring-green-500"
-              data-testid="select-year"
-            >
+            <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}
+              className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 outline-none focus:ring-2 focus:ring-green-500" data-testid="select-year">
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-            <select
-              value={selectedGroup}
-              onChange={e => setSelectedGroup(e.target.value)}
-              className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 outline-none focus:ring-2 focus:ring-green-500"
-              data-testid="select-group"
-            >
+            <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
+              className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 outline-none focus:ring-2 focus:ring-green-500" data-testid="select-group">
               <option value="all">Todos</option>
               {groups.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
             </select>
@@ -94,9 +97,7 @@ export default function AdminDashboard() {
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
-          <div className="text-center py-10 text-gray-400">
-            <p className="text-sm">Sem dados para exibir</p>
-          </div>
+          <div className="text-center py-10 text-gray-400"><p className="text-sm">Sem dados para exibir</p></div>
         )}
       </div>
 
@@ -105,9 +106,7 @@ export default function AdminDashboard() {
           <h2 className="font-bold text-gray-800 text-sm">Pedidos Recentes</h2>
         </div>
         {recentOrders.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <p className="text-sm">Nenhum pedido ainda</p>
-          </div>
+          <div className="text-center py-8 text-gray-400"><p className="text-sm">Nenhum pedido ainda</p></div>
         ) : (
           <div className="divide-y divide-gray-50">
             {recentOrders.map(order => (

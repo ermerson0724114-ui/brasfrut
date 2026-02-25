@@ -1,16 +1,15 @@
 import { useState, useRef } from "react";
 import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useDataStore } from "@/lib/store";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Employee } from "@shared/schema";
 
 const emptyForm = { name: "", registrationNumber: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "" };
 
 export default function AdminEmployees() {
   const { toast } = useToast();
-  const employees = useDataStore(s => s.employees);
-  const addEmployee = useDataStore(s => s.addEmployee);
-  const updateEmployee = useDataStore(s => s.updateEmployee);
-  const removeEmployee = useDataStore(s => s.removeEmployee);
+  const { data: employees = [], isLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -20,12 +19,31 @@ export default function AdminEmployees() {
   const [newPassword, setNewPassword] = useState("");
   const csvRef = useRef<HTMLInputElement>(null);
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+
+  const createMut = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/employees", data),
+    onSuccess: invalidate,
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/employees/${id}`, data),
+    onSuccess: invalidate,
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/employees/${id}`),
+    onSuccess: invalidate,
+  });
+  const bulkMut = useMutation({
+    mutationFn: (data: any[]) => apiRequest("POST", "/api/employees/bulk", data),
+    onSuccess: invalidate,
+  });
+
   const filtered = employees.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||
     e.registration_number?.includes(search)
   );
 
-  const openEdit = (emp: any) => {
+  const openEdit = (emp: Employee) => {
     setForm({
       name: emp.name, registrationNumber: emp.registration_number, email: emp.email || "",
       whatsapp: emp.whatsapp || "", funcao: emp.funcao || "", setor: emp.setor || "", distribuicao: emp.distribuicao || "",
@@ -36,17 +54,19 @@ export default function AdminEmployees() {
 
   const handleSave = () => {
     if (modal === "add") {
-      addEmployee({
-        id: Date.now(), name: form.name, registration_number: form.registrationNumber,
-        password: "", email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
-        setor: form.setor, distribuicao: form.distribuicao, is_locked: false, profile_image_url: null,
+      createMut.mutate({
+        name: form.name, registration_number: form.registrationNumber, password: "",
+        email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
+        setor: form.setor, distribuicao: form.distribuicao, is_locked: false,
       });
       toast({ title: "Funcionário adicionado!" });
     } else if (editId !== null) {
-      updateEmployee(editId, {
-        name: form.name, registration_number: form.registrationNumber,
-        email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
-        setor: form.setor, distribuicao: form.distribuicao,
+      updateMut.mutate({
+        id: editId, data: {
+          name: form.name, registration_number: form.registrationNumber,
+          email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
+          setor: form.setor, distribuicao: form.distribuicao,
+        }
       });
       toast({ title: "Funcionário atualizado!" });
     }
@@ -55,21 +75,19 @@ export default function AdminEmployees() {
   };
 
   const handleDelete = () => {
-    if (deleteId !== null) removeEmployee(deleteId);
+    if (deleteId !== null) deleteMut.mutate(deleteId);
     toast({ title: "Funcionário excluído" });
     setDeleteId(null);
   };
 
   const handleUnlock = (id: number) => {
-    updateEmployee(id, { is_locked: false });
+    updateMut.mutate({ id, data: { is_locked: false } });
     toast({ title: "Funcionário desbloqueado" });
   };
 
   const handleChangePassword = () => {
     if (!newPassword || newPassword.length < 6) return toast({ title: "Mínimo 6 caracteres", variant: "destructive" });
-    if (passwordModal !== null) {
-      updateEmployee(passwordModal, { password: newPassword });
-    }
+    if (passwordModal !== null) updateMut.mutate({ id: passwordModal, data: { password: newPassword } });
     toast({ title: "Senha alterada com sucesso!" });
     setPasswordModal(null);
     setNewPassword("");
@@ -82,27 +100,16 @@ export default function AdminEmployees() {
     reader.onload = () => {
       const text = reader.result as string;
       const lines = text.split("\n").filter(l => l.trim());
-      let count = 0;
-      lines.forEach(line => {
+      const emps = lines.map(line => {
         const cols = line.split(",").map(c => c.trim());
-        if (cols.length >= 2) {
-          addEmployee({
-            id: Date.now() + Math.random(),
-            registration_number: cols[0] || "",
-            name: cols[1] || "",
-            email: cols[2] || "",
-            whatsapp: cols[3] || "",
-            funcao: cols[4] || "",
-            setor: cols[5] || "",
-            distribuicao: cols[6] || "",
-            password: "",
-            is_locked: false,
-            profile_image_url: null,
-          });
-          count++;
-        }
-      });
-      toast({ title: `${count} funcionário(s) importado(s)!` });
+        return {
+          registration_number: cols[0] || "", name: cols[1] || "", email: cols[2] || "",
+          whatsapp: cols[3] || "", funcao: cols[4] || "", setor: cols[5] || "",
+          distribuicao: cols[6] || "", password: "", is_locked: false,
+        };
+      }).filter(e => e.name);
+      bulkMut.mutate(emps);
+      toast({ title: `${emps.length} funcionário(s) importado(s)!` });
       setModal(null);
     };
     reader.readAsText(file);
@@ -118,6 +125,8 @@ export default function AdminEmployees() {
     { key: "setor", label: "Setor", placeholder: "Ex: Produção" },
     { key: "distribuicao", label: "Distribuição", placeholder: "Ex: Matriz" },
   ];
+
+  if (isLoading) return <div className="text-center py-20 text-gray-400"><p className="text-sm">Carregando...</p></div>;
 
   return (
     <div className="bg-gray-50">
@@ -139,13 +148,9 @@ export default function AdminEmployees() {
         </div>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nome ou matrícula..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou matrícula..."
             className="w-full bg-gray-100 text-gray-800 placeholder-gray-400 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
-            data-testid="input-search-employees"
-          />
+            data-testid="input-search-employees" />
         </div>
       </div>
 
@@ -158,9 +163,7 @@ export default function AdminEmployees() {
         ) : filtered.map(emp => (
           <div key={emp.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3" data-testid={`card-employee-${emp.id}`}>
             <div className="w-11 h-11 rounded-2xl bg-green-100 flex items-center justify-center flex-shrink-0">
-              <span className="font-bold text-green-800 text-sm">
-                {emp.name.split(" ").slice(0, 2).map((n: string) => n[0]).join("")}
-              </span>
+              <span className="font-bold text-green-800 text-sm">{emp.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -170,9 +173,7 @@ export default function AdminEmployees() {
               <p className="text-xs text-gray-500">{emp.registration_number} · {emp.funcao || emp.setor || "-"}</p>
             </div>
             <div className="flex gap-1">
-              {emp.is_locked && (
-                <button onClick={() => handleUnlock(emp.id)} className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600" data-testid={`button-unlock-${emp.id}`}><Unlock size={14} /></button>
-              )}
+              {emp.is_locked && <button onClick={() => handleUnlock(emp.id)} className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600" data-testid={`button-unlock-${emp.id}`}><Unlock size={14} /></button>}
               <button onClick={() => { setPasswordModal(emp.id); setNewPassword(""); }} className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600" data-testid={`button-password-${emp.id}`}><Key size={13} /></button>
               <button onClick={() => openEdit(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-700" data-testid={`button-edit-employee-${emp.id}`}><Edit2 size={14} /></button>
               <button onClick={() => setDeleteId(emp.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" data-testid={`button-delete-employee-${emp.id}`}><Trash2 size={14} /></button>
@@ -192,18 +193,12 @@ export default function AdminEmployees() {
               {fields.map(({ key, label, placeholder }) => (
                 <div key={key}>
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</label>
-                  <input
-                    value={(form as any)[key]}
-                    onChange={e => setForm({ ...form, [key]: e.target.value })}
-                    placeholder={placeholder}
-                    className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
-                    data-testid={`input-${key}`}
-                  />
+                  <input value={(form as any)[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder}
+                    className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500" data-testid={`input-${key}`} />
                 </div>
               ))}
             </div>
-            <div className="flex gap-3 px-5 py-4 flex-shrink-0 bg-white border-t border-gray-100"
-              style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
+            <div className="flex gap-3 px-5 py-4 flex-shrink-0 bg-white border-t border-gray-100" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
               <button onClick={() => setModal(null)} className="flex-1 py-3.5 border border-gray-200 rounded-2xl text-gray-600 font-semibold">Cancelar</button>
               <button onClick={handleSave} className="flex-1 py-3.5 bg-green-900 text-white rounded-2xl font-bold" data-testid="button-save-employee">Salvar</button>
             </div>
@@ -218,14 +213,10 @@ export default function AdminEmployees() {
               <h3 className="font-extrabold text-lg">Alterar Senha</h3>
               <button onClick={() => setPasswordModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></button>
             </div>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
               placeholder="Nova senha (mín. 6 caracteres)"
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500 mb-4"
-              data-testid="input-new-password-admin"
-            />
+              data-testid="input-new-password-admin" />
             <div className="flex gap-3">
               <button onClick={() => setPasswordModal(null)} className="flex-1 py-3 border border-gray-200 rounded-2xl text-gray-600 font-semibold">Cancelar</button>
               <button onClick={handleChangePassword} className="flex-1 py-3 bg-green-900 text-white rounded-2xl font-bold" data-testid="button-save-password">Salvar</button>
@@ -236,8 +227,7 @@ export default function AdminEmployees() {
 
       {modal === "csv" && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-          <div className="w-full max-w-2xl bg-white rounded-t-3xl p-5"
-            style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))" }}>
+          <div className="w-full max-w-2xl bg-white rounded-t-3xl p-5" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))" }}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-extrabold text-lg">Importar CSV</h2>
               <button onClick={() => setModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></button>
@@ -249,9 +239,7 @@ export default function AdminEmployees() {
             <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
             <button onClick={() => csvRef.current?.click()}
               className="w-full py-4 border-2 border-dashed border-green-300 rounded-2xl text-green-700 font-semibold flex items-center justify-center gap-2"
-              data-testid="button-select-csv">
-              <Upload size={20} /> Selecionar CSV
-            </button>
+              data-testid="button-select-csv"><Upload size={20} /> Selecionar CSV</button>
           </div>
         </div>
       )}

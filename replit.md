@@ -5,20 +5,35 @@ Aplicativo web mobile-first para gerenciamento de pedidos de frutos/polpas da em
 ## Arquitetura
 
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend**: Express.js (serve o frontend, sem API de dados)
+- **Backend**: Express.js + Drizzle ORM + PostgreSQL
 - **Roteamento**: Wouter v3
-- **Estado Global**: Zustand com persistência (localStorage)
+- **Estado**: Zustand (somente auth), TanStack Query (dados do servidor)
 - **Gráficos**: Recharts
 - **Toasts**: shadcn/ui Toaster
 
 ## Persistência de Dados
 
-Todos os dados são persistidos via Zustand + localStorage (sem backend/banco de dados).
-Três stores principais:
+Todos os dados são persistidos no PostgreSQL via API REST:
+- Tabelas: `settings`, `employees`, `groups`, `subgroups`, `products`, `cycles`, `orders`, `order_items`
+- ORM: Drizzle com conexão via `DATABASE_URL`
+- Frontend usa TanStack Query para cache e sincronização
 
-- `brasfrut_auth` — Usuário logado e token
-- `brasfrut_settings` — Logo (base64), nome da empresa, senha do admin, email de recuperação
-- `brasfrut_data` — Funcionários, grupos, produtos, ciclos, pedidos (CRUD completo)
+Somente a sessão de autenticação usa Zustand + localStorage (`brasfrut_auth`).
+
+## API Endpoints
+
+- `GET/PATCH /api/settings` — Configurações (companyName, adminPassword, recoveryEmail, logoUrl)
+- `POST /api/auth/login` — Login admin/funcionário
+- `POST /api/auth/recover` — Recuperação de senha admin
+- `POST /api/auth/create-password` — Primeiro acesso do funcionário
+- `GET/POST/PATCH/DELETE /api/employees` — CRUD de funcionários
+- `POST /api/employees/bulk` — Importação em lote (CSV)
+- `GET/POST/PATCH/DELETE /api/groups` — CRUD de grupos (retorna subgrupos aninhados)
+- `POST/PATCH/DELETE /api/subgroups` — CRUD de subgrupos
+- `GET/POST/PATCH/DELETE /api/products` — CRUD de produtos
+- `GET/POST/PATCH /api/cycles` — CRUD de ciclos
+- `GET/POST/PATCH /api/orders` — CRUD de pedidos (com items)
+- `POST /api/migrate` — Migração de dados do localStorage para o banco
 
 ## Autenticação
 
@@ -34,7 +49,7 @@ Três stores principais:
 - **Histórico** `/historico` — Listagem de pedidos anteriores por mês/ano
 
 ### Admin (rota `/admin`)
-- **Dashboard** `/admin` — Cards de stats (funcionários, pedidos, total, produtos ativos), gráfico anual
+- **Dashboard** `/admin` — Cards de stats, gráfico anual
 - **Funcionários** `/admin/funcionarios` — CRUD, importação CSV, alterar senha, desbloquear
 - **Grupos** `/admin/grupos` — CRUD de grupos e subgrupos com limites de itens
 - **Produtos** `/admin/produtos` — CRUD de produtos com grupo/subgrupo, preço, unidade
@@ -48,16 +63,19 @@ Três stores principais:
 - Layout mobile-first, max-width 2xl centralizado
 - Bottom navigation bar fixa (3 abas para funcionário, 7 para admin)
 - Modais bottom-sheet para formulários
-- Admin layout: header verde com título, sub-páginas com headers claros
-- Tela de login com preview de logo personalizada
 
 ## Arquivos Principais
 
 ```
+shared/schema.ts              # Drizzle schema + tipos
+server/db.ts                   # Conexão PostgreSQL
+server/storage.ts              # DatabaseStorage (CRUD)
+server/routes.ts               # Rotas REST API
 client/src/
 ├── lib/
-│   ├── store.ts          # Zustand stores (auth + settings + data)
-│   └── mockData.ts       # Apenas constantes MONTHS e MONTHS_FULL
+│   ├── store.ts               # Zustand auth store
+│   ├── queryClient.ts         # TanStack Query config
+│   └── mockData.ts            # Constantes MONTHS
 ├── pages/
 │   ├── LoginPage.tsx
 │   ├── employee/
@@ -74,5 +92,5 @@ client/src/
 │       ├── AdminOrders.tsx
 │       ├── AdminCycles.tsx
 │       └── AdminSettings.tsx
-└── App.tsx               # Roteamento principal
+└── App.tsx
 ```

@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { CheckCircle, Clock, AlertTriangle, Lock } from "lucide-react";
-import { useAuthStore, useDataStore } from "@/lib/store";
+import { useAuthStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
 import { MONTHS } from "@/lib/mockData";
+import type { Cycle } from "@shared/schema";
+
+interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; }
+interface OrderData { id: number; employee_id: number; employee_name: string; status: string; total: string; cycle_id: number; items: OrderItem[]; }
+interface GroupData { id: number; name: string; subgroups: { id: number; name: string; item_limit: number | null }[]; }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   draft:     { label: "Em edição",    color: "bg-amber-50 text-amber-700 border border-amber-200",  icon: Clock },
@@ -13,13 +19,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const orders = useDataStore(s => s.orders);
-  const cycles = useDataStore(s => s.cycles);
-  const groups = useDataStore(s => s.groups);
+  const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
+  const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
+  const { data: groups = [] } = useQuery<GroupData[]>({ queryKey: ["/api/groups"] });
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
 
   const myOrders = orders.filter(o => o.employee_id === user?.id);
-
   const activeCycle = cycles.find(c => c.status === "open");
   const currentOrder = myOrders.find(o => o.cycle_id === activeCycle?.id);
 

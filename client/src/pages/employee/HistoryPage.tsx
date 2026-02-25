@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { ChevronDown, Clock } from "lucide-react";
-import { useAuthStore, useDataStore } from "@/lib/store";
+import { useAuthStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
 import { MONTHS_FULL } from "@/lib/mockData";
+import type { Cycle } from "@shared/schema";
+
+interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; }
+interface OrderData { id: number; employee_id: number; employee_name: string; status: string; total: string; cycle_id: number; items: OrderItem[]; }
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Em edição",
@@ -11,8 +16,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function HistoryPage() {
   const { user } = useAuthStore();
-  const orders = useDataStore(s => s.orders);
-  const cycles = useDataStore(s => s.cycles);
+  const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
+  const { data: cycles = [] } = useQuery<Cycle[]>({ queryKey: ["/api/cycles"] });
 
   const myOrders = orders
     .filter(o => o.employee_id === user?.id)

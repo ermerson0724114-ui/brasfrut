@@ -1,31 +1,39 @@
 import { useState, useRef } from "react";
 import { Settings, Upload, Trash2, Leaf, Image, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useSettingsStore } from "@/lib/store";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function AdminSettings() {
   const { toast } = useToast();
-  const { logoUrl, companyName, adminPassword, setLogoUrl, setCompanyName, setAdminPassword } = useSettingsStore();
-  const [nameInput, setNameInput] = useState(companyName);
+  const { data: settings } = useQuery<Record<string, string>>({ queryKey: ["/api/settings"] });
+  const companyName = settings?.companyName || "Brasfrut";
+  const logoUrl = settings?.logoUrl || null;
+  const [nameInput, setNameInput] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [nameLoaded, setNameLoaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  if (settings && !nameLoaded) {
+    setNameInput(companyName);
+    setNameLoaded(true);
+  }
+
+  const updateSettings = useMutation({
+    mutationFn: (data: Record<string, string>) => apiRequest("PATCH", "/api/settings", data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/settings"] }),
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Selecione uma imagem válida", variant: "destructive" });
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Imagem muito grande (máx. 2MB)", variant: "destructive" });
-      return;
-    }
+    if (!file.type.startsWith("image/")) return toast({ title: "Selecione uma imagem válida", variant: "destructive" });
+    if (file.size > 2 * 1024 * 1024) return toast({ title: "Imagem muito grande (máx. 2MB)", variant: "destructive" });
     const reader = new FileReader();
     reader.onload = () => {
-      setLogoUrl(reader.result as string);
+      updateSettings.mutate({ logoUrl: reader.result as string });
       toast({ title: "Logo atualizada!" });
     };
     reader.readAsDataURL(file);
@@ -33,37 +41,23 @@ export default function AdminSettings() {
   };
 
   const handleRemoveLogo = () => {
-    setLogoUrl(null);
+    updateSettings.mutate({ logoUrl: "" });
     toast({ title: "Logo removida" });
   };
 
   const handleSaveName = () => {
-    if (!nameInput.trim()) {
-      toast({ title: "Nome não pode ser vazio", variant: "destructive" });
-      return;
-    }
-    setCompanyName(nameInput.trim());
+    if (!nameInput.trim()) return toast({ title: "Nome não pode ser vazio", variant: "destructive" });
+    updateSettings.mutate({ companyName: nameInput.trim() });
     toast({ title: "Nome atualizado!" });
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentPw !== adminPassword) {
-      toast({ title: "Senha atual incorreta", variant: "destructive" });
-      return;
-    }
-    if (newPw.length < 6) {
-      toast({ title: "Nova senha: mínimo 6 caracteres", variant: "destructive" });
-      return;
-    }
-    if (newPw !== confirmPw) {
-      toast({ title: "Senhas não coincidem", variant: "destructive" });
-      return;
-    }
-    setAdminPassword(newPw);
-    setCurrentPw("");
-    setNewPw("");
-    setConfirmPw("");
+    if (currentPw !== settings?.adminPassword) return toast({ title: "Senha atual incorreta", variant: "destructive" });
+    if (newPw.length < 6) return toast({ title: "Nova senha: mínimo 6 caracteres", variant: "destructive" });
+    if (newPw !== confirmPw) return toast({ title: "Senhas não coincidem", variant: "destructive" });
+    updateSettings.mutate({ adminPassword: newPw });
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
     toast({ title: "Senha alterada com sucesso!" });
   };
 
@@ -90,48 +84,24 @@ export default function AdminSettings() {
           <form onSubmit={handleChangePassword} className="space-y-3">
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Senha atual</label>
-              <input
-                type="password"
-                required
-                value={currentPw}
-                onChange={e => setCurrentPw(e.target.value)}
+              <input type="password" required value={currentPw} onChange={e => setCurrentPw(e.target.value)}
                 className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Digite a senha atual"
-                data-testid="input-current-password"
-              />
+                placeholder="Digite a senha atual" data-testid="input-current-password" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nova senha</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
+              <input type="password" required minLength={6} value={newPw} onChange={e => setNewPw(e.target.value)}
                 className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Mínimo 6 caracteres"
-                data-testid="input-settings-new-password"
-              />
+                placeholder="Mínimo 6 caracteres" data-testid="input-settings-new-password" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Confirmar nova senha</label>
-              <input
-                type="password"
-                required
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
+              <input type="password" required value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
                 className="w-full mt-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Repita a nova senha"
-                data-testid="input-settings-confirm-password"
-              />
+                placeholder="Repita a nova senha" data-testid="input-settings-confirm-password" />
             </div>
-            <button
-              type="submit"
-              className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
-              data-testid="button-change-admin-password"
-            >
-              Alterar senha
-            </button>
+            <button type="submit" className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
+              data-testid="button-change-admin-password">Alterar senha</button>
           </form>
         </div>
 
@@ -142,30 +112,18 @@ export default function AdminSettings() {
           </div>
           <div className="flex flex-col items-center gap-4">
             <div className="w-24 h-24 rounded-3xl bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
-              {logoUrl ? (
-                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" data-testid="img-settings-logo" />
-              ) : (
-                <Leaf size={36} className="text-gray-300" />
-              )}
+              {logoUrl ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" data-testid="img-settings-logo" />
+                : <Leaf size={36} className="text-gray-300" />}
             </div>
             <div className="flex gap-2 w-full">
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              <button
-                onClick={() => fileRef.current?.click()}
+              <button onClick={() => fileRef.current?.click()}
                 className="flex-1 py-3 bg-green-900 text-white rounded-2xl font-semibold flex items-center justify-center gap-2 text-sm"
-                data-testid="button-upload-logo"
-              >
-                <Upload size={16} />
-                {logoUrl ? "Trocar Logo" : "Enviar Logo"}
-              </button>
+                data-testid="button-upload-logo"><Upload size={16} />{logoUrl ? "Trocar Logo" : "Enviar Logo"}</button>
               {logoUrl && (
-                <button
-                  onClick={handleRemoveLogo}
+                <button onClick={handleRemoveLogo}
                   className="py-3 px-4 bg-red-50 text-red-500 rounded-2xl font-semibold flex items-center justify-center gap-2 text-sm"
-                  data-testid="button-remove-logo"
-                >
-                  <Trash2 size={16} />
-                </button>
+                  data-testid="button-remove-logo"><Trash2 size={16} /></button>
               )}
             </div>
             <p className="text-xs text-gray-400 text-center">Formatos: PNG, JPG, SVG. Máximo: 2MB</p>
@@ -178,20 +136,11 @@ export default function AdminSettings() {
             <h3 className="font-bold text-gray-800">Nome da empresa</h3>
           </div>
           <div className="space-y-3">
-            <input
-              value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
-              placeholder="Nome da empresa"
+            <input value={nameInput} onChange={e => setNameInput(e.target.value)} placeholder="Nome da empresa"
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-500"
-              data-testid="input-company-name"
-            />
-            <button
-              onClick={handleSaveName}
-              className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
-              data-testid="button-save-name"
-            >
-              Salvar nome
-            </button>
+              data-testid="input-company-name" />
+            <button onClick={handleSaveName} className="w-full py-3 bg-green-900 text-white rounded-2xl font-bold text-sm"
+              data-testid="button-save-name">Salvar nome</button>
           </div>
         </div>
 
