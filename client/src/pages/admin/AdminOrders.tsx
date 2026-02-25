@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download } from "lucide-react";
+import { Search, ChevronDown, ShoppingBag, Plus, Minus, Download, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -27,6 +27,7 @@ export default function AdminOrders() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const [deleteOrderId, setDeleteOrderId] = useState<number | null>(null);
 
   const activeCycleId = selectedCycleId ?? cycles[0]?.id ?? null;
   const selectedCycle = cycles.find(c => c.id === activeCycleId);
@@ -37,6 +38,19 @@ export default function AdminOrders() {
     mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/orders/${id}`, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
   });
+
+  const deleteOrderMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/orders/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+  });
+
+  const handleDeleteOrder = () => {
+    if (deleteOrderId !== null) {
+      deleteOrderMut.mutate(deleteOrderId);
+      toast({ title: "Pedido excluído" });
+      setDeleteOrderId(null);
+    }
+  };
 
   const openEdit = (order: OrderData) => {
     const cartObj: Record<number, number> = {};
@@ -202,6 +216,7 @@ export default function AdminOrders() {
               <div className="flex items-center gap-2">
                 <span className={"text-xs font-bold px-2 py-0.5 rounded-full " + (order.status === "confirmed" ? "bg-green-100 text-green-700" : order.status === "closed" ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700")}>
                   {STATUS_LABELS[order.status] || order.status}</span>
+                <button onClick={() => setDeleteOrderId(order.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" data-testid={`button-delete-order-${order.id}`}><Trash2 size={14} /></button>
                 <button onClick={() => openEdit(order)} className="text-xs bg-green-900 text-white px-3 py-1.5 rounded-xl font-semibold" data-testid={`button-view-order-${order.id}`}>Ver</button>
               </div>
             </div>
@@ -209,6 +224,19 @@ export default function AdminOrders() {
           </div>
         ))}
       </div>
+
+      {deleteOrderId !== null && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
+            <h3 className="font-extrabold text-lg mb-2">Excluir pedido</h3>
+            <p className="text-gray-500 text-sm mb-5">Tem certeza que deseja excluir este pedido? Essa ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteOrderId(null)} className="flex-1 py-3 border border-gray-200 rounded-2xl font-semibold text-gray-600">Cancelar</button>
+              <button onClick={handleDeleteOrder} className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold" data-testid="button-confirm-delete-order">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">

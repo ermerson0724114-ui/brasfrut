@@ -339,6 +339,11 @@ export async function registerRoutes(
     res.json(order);
   });
 
+  app.delete("/api/orders/:id", async (req, res) => {
+    await storage.deleteOrder(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
   // --- BULK MIGRATE (from localStorage) ---
   app.post("/api/migrate", async (req, res) => {
     const { employees: emps, groups: grps, products: prods, cycles: cycs, orders: ords, settings: sets } = req.body;
