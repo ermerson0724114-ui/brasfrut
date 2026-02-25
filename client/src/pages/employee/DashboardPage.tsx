@@ -18,6 +18,20 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
   none:      { label: "Não iniciado", color: "bg-blue-50 text-blue-600 border border-blue-200",     icon: AlertTriangle },
 };
 
+function groupItems(items: OrderItem[]) {
+  const map = new Map<string, OrderItem[]>();
+  for (const item of items) {
+    const key = item.group_name_snapshot || "Outros";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return Array.from(map.entries()).map(([groupName, groupItems]) => ({
+    groupName,
+    items: groupItems,
+    subtotal: groupItems.reduce((s, i) => s + parseFloat(i.unit_price) * i.quantity, 0),
+  }));
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
@@ -61,6 +75,9 @@ export default function DashboardPage() {
     return { label, total };
   });
 
+  const grouped = currentOrder?.items ? groupItems(currentOrder.items) : [];
+  const grandTotal = parseFloat(currentOrder?.total || "0");
+
   return (
     <div className="px-4 py-4 space-y-4">
       {isOpen ? (
@@ -98,7 +115,7 @@ export default function DashboardPage() {
         <div className="col-span-1 bg-white rounded-2xl p-3 border border-gray-100 flex flex-col items-center justify-center text-center">
           <p className="text-xs text-gray-500 font-medium">Total</p>
           <p className="text-base font-extrabold text-green-900" data-testid="text-total">
-            R$ {parseFloat(currentOrder?.total || "0").toFixed(2).replace(".", ",")}
+            R$ {grandTotal.toFixed(2).replace(".", ",")}
           </p>
         </div>
         <div className="col-span-1 bg-white rounded-2xl p-3 border border-gray-100 flex flex-col items-center justify-center text-center">
@@ -140,28 +157,46 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {currentOrder?.items && currentOrder.items.length > 0 && (
+      {grouped.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-50">
             <h2 className="font-bold text-gray-800 text-sm">Pedido Atual</h2>
           </div>
-          <div className="divide-y divide-gray-50">
-            {currentOrder.items.map(item => (
-              <div key={item.id} className="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{item.product_name_snapshot}</p>
-                  <p className="text-xs text-gray-500">{item.group_name_snapshot}
-                    {item.subgroup_name_snapshot ? ` · ${item.subgroup_name_snapshot}` : ""}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-gray-800">{item.quantity}x</p>
-                  <p className="text-xs text-gray-500">
-                    R$ {(parseFloat(item.unit_price) * item.quantity).toFixed(2).replace(".", ",")}
-                  </p>
-                </div>
+          {grouped.map((group, gi) => (
+            <div key={group.groupName}>
+              <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.groupName}</p>
               </div>
-            ))}
+              <div className="divide-y divide-gray-50">
+                {group.items.map(item => (
+                  <div key={item.id} className="px-4 py-2.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{item.product_name_snapshot}</p>
+                      {item.subgroup_name_snapshot && (
+                        <p className="text-xs text-gray-400">{item.subgroup_name_snapshot}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gray-800">{item.quantity}x</p>
+                      <p className="text-xs text-gray-500">
+                        R$ {(parseFloat(item.unit_price) * item.quantity).toFixed(2).replace(".", ",")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-2 bg-gray-50/60 flex justify-between border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500">Subtotal {group.groupName}</p>
+                <p className="text-xs font-bold text-gray-700">R$ {group.subtotal.toFixed(2).replace(".", ",")}</p>
+              </div>
+              {gi < grouped.length - 1 && <div className="border-b border-gray-100" />}
+            </div>
+          ))}
+          <div className="px-4 py-3 border-t border-gray-200 flex justify-between bg-green-50/50">
+            <p className="font-bold text-gray-700">Total Geral</p>
+            <p className="font-extrabold text-green-900" data-testid="text-order-total">
+              R$ {grandTotal.toFixed(2).replace(".", ",")}
+            </p>
           </div>
         </div>
       )}
