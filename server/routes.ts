@@ -62,6 +62,14 @@ export async function registerRoutes(
     return res.status(403).json({ message: "Email não autorizado para recuperação" });
   });
 
+  app.post("/api/auth/check", async (req, res) => {
+    const { username } = req.body;
+    const emp = await storage.getEmployeeByRegistration(username);
+    if (!emp) return res.status(404).json({ message: "Matrícula não encontrada" });
+    if (emp.is_locked) return res.status(403).json({ message: "Conta bloqueada. Contate o administrador." });
+    return res.json({ needsPassword: !emp.password, employeeId: emp.id, name: emp.name });
+  });
+
   app.post("/api/auth/create-password", async (req, res) => {
     const { employeeId, password } = req.body;
     const emp = await storage.updateEmployee(employeeId, { password });
