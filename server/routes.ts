@@ -46,6 +46,7 @@ export async function registerRoutes(
     }
     const emp = await storage.getEmployeeByRegistration(username);
     if (!emp) return res.status(401).json({ message: "Matrícula não encontrada" });
+    if (emp.status === "inactive") return res.status(403).json({ message: "Funcionário desligado. Contate o administrador." });
     if (emp.is_locked) return res.status(403).json({ message: "Conta bloqueada. Contate o administrador." });
     if (!emp.password) return res.json({ needsPassword: true, employeeId: emp.id });
     if (emp.password !== password) return res.status(401).json({ message: "Senha incorreta" });
@@ -66,6 +67,7 @@ export async function registerRoutes(
     const { username } = req.body;
     const emp = await storage.getEmployeeByRegistration(username);
     if (!emp) return res.status(404).json({ message: "Matrícula não encontrada" });
+    if (emp.status === "inactive") return res.status(403).json({ message: "Funcionário desligado. Contate o administrador." });
     if (emp.is_locked) return res.status(403).json({ message: "Conta bloqueada. Contate o administrador." });
     return res.json({ needsPassword: !emp.password, employeeId: emp.id, name: emp.name });
   });
@@ -107,6 +109,44 @@ export async function registerRoutes(
       created.push(emp);
     }
     res.json(created);
+  });
+
+  app.post("/api/employees/sync", async (req, res) => {
+    const list = req.body as any[];
+    const fileRegistrations = new Set(list.map((e: any) => e.registration_number?.trim()).filter(Boolean));
+    const allEmployees = await storage.getEmployees();
+    let added = 0, reactivated = 0, deactivated = 0;
+    for (const item of list) {
+      const reg = item.registration_number?.trim();
+      if (!reg) continue;
+      const existing = allEmployees.find(e => e.registration_number === reg);
+      if (existing) {
+        const updates: any = {};
+        if (item.name && item.name !== existing.name) updates.name = item.name;
+        if (item.funcao && item.funcao !== existing.funcao) updates.funcao = item.funcao;
+        if (item.setor && item.setor !== existing.setor) updates.setor = item.setor;
+        if (item.distribuicao && item.distribuicao !== existing.distribuicao) updates.distribuicao = item.distribuicao;
+        if (item.email && item.email !== existing.email) updates.email = item.email;
+        if (item.whatsapp && item.whatsapp !== existing.whatsapp) updates.whatsapp = item.whatsapp;
+        if (existing.status === "inactive") {
+          updates.status = "active";
+          reactivated++;
+        }
+        if (Object.keys(updates).length > 0) {
+          await storage.updateEmployee(existing.id, updates);
+        }
+      } else {
+        await storage.createEmployee({ ...item, status: "active", password: "", is_locked: false });
+        added++;
+      }
+    }
+    for (const emp of allEmployees) {
+      if (emp.status === "active" && !fileRegistrations.has(emp.registration_number)) {
+        await storage.updateEmployee(emp.id, { status: "inactive" });
+        deactivated++;
+      }
+    }
+    res.json({ added, reactivated, deactivated, total: fileRegistrations.size });
   });
 
   // --- GROUPS ---

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Unlock, Upload, X, Users, Key, UserCheck, UserX, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,7 +17,9 @@ export default function AdminEmployees() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [passwordModal, setPasswordModal] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
   const csvRef = useRef<HTMLInputElement>(null);
+  const syncRef = useRef<HTMLInputElement>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
 
@@ -37,8 +39,27 @@ export default function AdminEmployees() {
     mutationFn: (data: any[]) => apiRequest("POST", "/api/employees/bulk", data),
     onSuccess: invalidate,
   });
+  const syncMut = useMutation({
+    mutationFn: async (data: any[]) => {
+      const res = await apiRequest("POST", "/api/employees/sync", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidate();
+      const parts = [];
+      if (data.added > 0) parts.push(`${data.added} adicionado(s)`);
+      if (data.reactivated > 0) parts.push(`${data.reactivated} reativado(s)`);
+      if (data.deactivated > 0) parts.push(`${data.deactivated} desligado(s)`);
+      if (parts.length === 0) parts.push("Nenhuma alteração");
+      toast({ title: "Sincronização concluída", description: parts.join(", ") });
+    },
+  });
 
-  const filtered = employees.filter(e =>
+  const activeEmployees = employees.filter(e => (e as any).status !== "inactive");
+  const inactiveEmployees = employees.filter(e => (e as any).status === "inactive");
+  const displayList = statusFilter === "active" ? activeEmployees : inactiveEmployees;
+
+  const filtered = displayList.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||
     e.registration_number?.includes(search)
   );
@@ -57,7 +78,7 @@ export default function AdminEmployees() {
       createMut.mutate({
         name: form.name, registration_number: form.registrationNumber, password: "",
         email: form.email, whatsapp: form.whatsapp, funcao: form.funcao,
-        setor: form.setor, distribuicao: form.distribuicao, is_locked: false,
+        setor: form.setor, distribuicao: form.distribuicao, is_locked: false, status: "active",
       });
       toast({ title: "Funcionário adicionado!" });
     } else if (editId !== null) {
@@ -80,6 +101,12 @@ export default function AdminEmployees() {
     setDeleteId(null);
   };
 
+  const handleToggleStatus = (emp: Employee) => {
+    const newStatus = (emp as any).status === "inactive" ? "active" : "inactive";
+    updateMut.mutate({ id: emp.id, data: { status: newStatus } });
+    toast({ title: newStatus === "active" ? "Funcionário reativado!" : "Funcionário desligado!" });
+  };
+
   const handleUnlock = (id: number) => {
     updateMut.mutate({ id, data: { is_locked: false } });
     toast({ title: "Funcionário desbloqueado" });
@@ -93,27 +120,48 @@ export default function AdminEmployees() {
     setNewPassword("");
   };
 
+  const parseFileContent = (text: string) => {
+    const lines = text.split("\n").filter(l => l.trim());
+    const separator = lines[0]?.includes(";") ? ";" : lines[0]?.includes("\t") ? "\t" : ",";
+    return lines.map(line => {
+      const cols = line.split(separator).map(c => c.trim());
+      return {
+        registration_number: cols[0] || "", name: cols[1] || "", email: cols[2] || "",
+        whatsapp: cols[3] || "", funcao: cols[4] || "", setor: cols[5] || "",
+        distribuicao: cols[6] || "", password: "", is_locked: false,
+      };
+    }).filter(e => e.name && e.registration_number);
+  };
+
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const text = reader.result as string;
-      const lines = text.split("\n").filter(l => l.trim());
-      const emps = lines.map(line => {
-        const cols = line.split(",").map(c => c.trim());
-        return {
-          registration_number: cols[0] || "", name: cols[1] || "", email: cols[2] || "",
-          whatsapp: cols[3] || "", funcao: cols[4] || "", setor: cols[5] || "",
-          distribuicao: cols[6] || "", password: "", is_locked: false,
-        };
-      }).filter(e => e.name);
+      const emps = parseFileContent(reader.result as string);
       bulkMut.mutate(emps);
       toast({ title: `${emps.length} funcionário(s) importado(s)!` });
       setModal(null);
     };
     reader.readAsText(file);
     if (csvRef.current) csvRef.current.value = "";
+  };
+
+  const handleSyncImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const emps = parseFileContent(reader.result as string);
+      if (emps.length === 0) {
+        toast({ title: "Arquivo vazio ou formato inválido", variant: "destructive" });
+        return;
+      }
+      syncMut.mutate(emps);
+      setModal(null);
+    };
+    reader.readAsText(file);
+    if (syncRef.current) syncRef.current.value = "";
   };
 
   const fields = [
@@ -138,14 +186,28 @@ export default function AdminEmployees() {
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-gray-800">Funcionários</h2>
-              <p className="text-gray-500 text-xs">{employees.length} cadastrado(s)</p>
+              <p className="text-gray-500 text-xs">{activeEmployees.length} ativo(s) · {inactiveEmployees.length} desligado(s)</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setModal("csv")} className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600" data-testid="button-import-csv"><Upload size={16} /></button>
+            <button onClick={() => setModal("import")} className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600" data-testid="button-import"><Upload size={16} /></button>
             <button onClick={() => { setForm(emptyForm); setEditId(null); setModal("add"); }} className="w-9 h-9 bg-green-900 text-white rounded-xl flex items-center justify-center" data-testid="button-add-employee"><Plus size={18} /></button>
           </div>
         </div>
+
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-3">
+          <button onClick={() => setStatusFilter("active")}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${statusFilter === "active" ? "bg-white text-green-800 shadow-sm" : "text-gray-500"}`}
+            data-testid="filter-active">
+            <UserCheck size={14} /> Ativos ({activeEmployees.length})
+          </button>
+          <button onClick={() => setStatusFilter("inactive")}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${statusFilter === "inactive" ? "bg-white text-red-600 shadow-sm" : "text-gray-500"}`}
+            data-testid="filter-inactive">
+            <UserX size={14} /> Desligados ({inactiveEmployees.length})
+          </button>
+        </div>
+
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome ou matrícula..."
@@ -158,25 +220,32 @@ export default function AdminEmployees() {
         {filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <Users size={40} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Nenhum funcionário</p>
+            <p className="text-sm">{statusFilter === "active" ? "Nenhum funcionário ativo" : "Nenhum funcionário desligado"}</p>
           </div>
         ) : filtered.map(emp => (
-          <div key={emp.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3" data-testid={`card-employee-${emp.id}`}>
-            <div className="w-11 h-11 rounded-2xl bg-green-100 flex items-center justify-center flex-shrink-0">
-              <span className="font-bold text-green-800 text-sm">{emp.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>
+          <div key={emp.id} className={`bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3 ${(emp as any).status === "inactive" ? "opacity-60" : ""}`} data-testid={`card-employee-${emp.id}`}>
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${(emp as any).status === "inactive" ? "bg-gray-100" : "bg-green-100"}`}>
+              <span className={`font-bold text-sm ${(emp as any).status === "inactive" ? "text-gray-500" : "text-green-800"}`}>{emp.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-semibold text-gray-800 text-sm truncate">{emp.name}</p>
-                {emp.is_locked && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Bloqueado</span>}
+                {(emp as any).status === "inactive" && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-semibold">Desligado</span>}
+                {emp.is_locked && <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold">Bloqueado</span>}
               </div>
               <p className="text-xs text-gray-500">{emp.registration_number} · {emp.funcao || emp.setor || "-"}</p>
             </div>
             <div className="flex gap-1">
-              {emp.is_locked && <button onClick={() => handleUnlock(emp.id)} className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600" data-testid={`button-unlock-${emp.id}`}><Unlock size={14} /></button>}
-              <button onClick={() => { setPasswordModal(emp.id); setNewPassword(""); }} className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600" data-testid={`button-password-${emp.id}`}><Key size={13} /></button>
-              <button onClick={() => openEdit(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-700" data-testid={`button-edit-employee-${emp.id}`}><Edit2 size={14} /></button>
-              <button onClick={() => setDeleteId(emp.id)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" data-testid={`button-delete-employee-${emp.id}`}><Trash2 size={14} /></button>
+              {(emp as any).status === "inactive" ? (
+                <button onClick={() => handleToggleStatus(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-600" title="Reativar" data-testid={`button-reactivate-${emp.id}`}><RefreshCw size={14} /></button>
+              ) : (
+                <>
+                  {emp.is_locked && <button onClick={() => handleUnlock(emp.id)} className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600" data-testid={`button-unlock-${emp.id}`}><Unlock size={14} /></button>}
+                  <button onClick={() => { setPasswordModal(emp.id); setNewPassword(""); }} className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600" data-testid={`button-password-${emp.id}`}><Key size={13} /></button>
+                  <button onClick={() => openEdit(emp)} className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center text-green-700" data-testid={`button-edit-employee-${emp.id}`}><Edit2 size={14} /></button>
+                  <button onClick={() => handleToggleStatus(emp)} className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center text-red-500" title="Desligar" data-testid={`button-deactivate-${emp.id}`}><UserX size={14} /></button>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -225,21 +294,44 @@ export default function AdminEmployees() {
         </div>
       )}
 
-      {modal === "csv" && (
+      {modal === "import" && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="w-full max-w-2xl bg-white rounded-t-3xl p-5" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))" }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-extrabold text-lg">Importar CSV</h2>
+              <h2 className="font-extrabold text-lg">Importar Funcionários</h2>
               <button onClick={() => setModal(null)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><X size={16} /></button>
             </div>
+
             <div className="bg-gray-50 rounded-2xl p-4 mb-4">
-              <p className="text-sm text-gray-600 font-medium mb-1">Formato (7 colunas):</p>
-              <code className="text-xs text-gray-500">matricula, nome, email, whatsapp, funcao, setor, distribuicao</code>
+              <p className="text-sm text-gray-600 font-medium mb-1">Formato do arquivo (CSV ou TXT):</p>
+              <code className="text-xs text-gray-500">matrícula, nome, email, whatsapp, função, setor, distribuição</code>
+              <p className="text-xs text-gray-400 mt-1">Separadores aceitos: vírgula, ponto-e-vírgula ou tabulação</p>
             </div>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
-            <button onClick={() => csvRef.current?.click()}
-              className="w-full py-4 border-2 border-dashed border-green-300 rounded-2xl text-green-700 font-semibold flex items-center justify-center gap-2"
-              data-testid="button-select-csv"><Upload size={20} /> Selecionar CSV</button>
+
+            <input ref={syncRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleSyncImport} />
+            <input ref={csvRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvImport} />
+
+            <div className="space-y-3">
+              <button onClick={() => syncRef.current?.click()}
+                className="w-full py-4 bg-green-50 border-2 border-green-300 rounded-2xl text-green-800 font-semibold flex flex-col items-center gap-1"
+                data-testid="button-sync-file">
+                <div className="flex items-center gap-2">
+                  <RefreshCw size={20} />
+                  <span>Sincronizar lista</span>
+                </div>
+                <span className="text-xs text-green-600 font-normal">Atualiza status: quem não está no arquivo fica como desligado</span>
+              </button>
+
+              <button onClick={() => csvRef.current?.click()}
+                className="w-full py-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600 font-semibold flex flex-col items-center gap-1"
+                data-testid="button-add-file">
+                <div className="flex items-center gap-2">
+                  <Upload size={20} />
+                  <span>Adicionar ao cadastro</span>
+                </div>
+                <span className="text-xs text-gray-400 font-normal">Apenas adiciona novos, sem alterar os existentes</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -248,7 +340,7 @@ export default function AdminEmployees() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
             <h3 className="font-extrabold text-lg mb-2">Confirmar exclusão</h3>
-            <p className="text-gray-500 text-sm mb-5">O funcionário será desativado e não aparecerá mais na lista.</p>
+            <p className="text-gray-500 text-sm mb-5">O funcionário será removido permanentemente.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteId(null)} className="flex-1 py-3 border border-gray-200 rounded-2xl font-semibold text-gray-600">Cancelar</button>
               <button onClick={handleDelete} className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold" data-testid="button-confirm-delete-employee">Excluir</button>
