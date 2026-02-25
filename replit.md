@@ -13,9 +13,10 @@ Aplicativo web mobile-first para gerenciamento de pedidos de frutos/polpas da em
 
 ## Persistência de Dados
 
-Todos os dados são persistidos no PostgreSQL via API REST:
+Todos os dados são persistidos no PostgreSQL (Neon) via API REST:
 - Tabelas: `settings`, `employees`, `groups`, `subgroups`, `products`, `cycles`, `orders`, `order_items`, `audit_logs`
-- ORM: Drizzle com conexão via `DATABASE_URL`
+- ORM: Drizzle com conexão via `NEON_DATABASE_URL` (prioridade) ou `DATABASE_URL` (fallback)
+- Database: Neon PostgreSQL (sa-east-1) — `server/db.ts` usa `pg.Pool` com SSL para Neon
 - Frontend usa TanStack Query para cache e sincronização (staleTime: 30s)
 
 Somente a sessão de autenticação usa Zustand + localStorage (`brasfrut_auth`).
