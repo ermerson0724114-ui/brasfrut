@@ -163,33 +163,44 @@ export default function AdminEmployees() {
   };
   const requiredFields = ["registration_number", "name", "setor", "distribuicao"];
 
-  const parseExcelFile = (buffer: ArrayBuffer): ReturnType<typeof Array<any>> => {
+  const excelDateToString = (v: any): string => {
+    if (typeof v === "number" && v > 30000 && v < 100000) {
+      const d = new Date((v - 25569) * 86400000);
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    }
+    return String(v ?? "").trim();
+  };
+
+  const parseExcelFile = (buffer: ArrayBuffer): any[] => {
     const wb = XLSX.read(buffer, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    if (rows.length === 0) return [];
+    const labels: Record<string, string> = { registration_number: "Matrícula", name: "Nome", setor: "Setor", distribuicao: "Distribuição" };
 
-    const headers = Object.keys(rows[0]);
-    const colMapping: Record<string, string> = {};
-    for (const h of headers) {
-      const normalized = h.toLowerCase().trim();
-      if (headerMap[normalized]) colMapping[h] = headerMap[normalized];
-    }
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      if (rows.length === 0) continue;
 
-    const missingRequired = requiredFields.filter(f => !Object.values(colMapping).includes(f));
-    if (missingRequired.length > 0) {
-      const labels: Record<string, string> = { registration_number: "Matrícula", name: "Nome", setor: "Setor", distribuicao: "Distribuição" };
-      toast({ title: `Colunas obrigatórias ausentes: ${missingRequired.map(f => labels[f]).join(", ")}`, variant: "destructive" });
-      return [];
-    }
-
-    return rows.map(row => {
-      const emp: any = { registration_number: "", name: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "", admissao: "", password: "", is_locked: false };
-      for (const [excelCol, field] of Object.entries(colMapping)) {
-        emp[field] = String(row[excelCol] ?? "").trim();
+      const headers = Object.keys(rows[0]);
+      const colMapping: Record<string, string> = {};
+      for (const h of headers) {
+        const normalized = h.toLowerCase().trim();
+        if (headerMap[normalized]) colMapping[h] = headerMap[normalized];
       }
-      return emp;
-    }).filter((e: any) => e.name && e.registration_number && e.setor && e.distribuicao);
+
+      const missingRequired = requiredFields.filter(f => !Object.values(colMapping).includes(f));
+      if (missingRequired.length > 0) continue;
+
+      return rows.map(row => {
+        const emp: any = { registration_number: "", name: "", email: "", whatsapp: "", funcao: "", setor: "", distribuicao: "", admissao: "", password: "", is_locked: false };
+        for (const [excelCol, field] of Object.entries(colMapping)) {
+          emp[field] = field === "admissao" ? excelDateToString(row[excelCol]) : String(row[excelCol] ?? "").trim();
+        }
+        return emp;
+      }).filter((e: any) => e.name && e.registration_number && e.setor && e.distribuicao);
+    }
+
+    toast({ title: `Nenhuma aba com colunas obrigatórias: ${Object.values(labels).join(", ")}`, variant: "destructive" });
+    return [];
   };
 
   const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, mode: "add" | "sync") => {
