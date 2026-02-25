@@ -33,16 +33,19 @@ export default function AdminSettings() {
     if (file.size > 2 * 1024 * 1024) return toast({ title: "Imagem muito grande (máx. 2MB)", variant: "destructive" });
     const reader = new FileReader();
     reader.onload = () => {
-      updateSettings.mutate({ logoUrl: reader.result as string });
-      toast({ title: "Logo atualizada!" });
+      updateSettings.mutate({ logoUrl: reader.result as string }, {
+        onSuccess: () => toast({ title: "Logo atualizada!" }),
+        onError: () => toast({ title: "Erro ao salvar logo", variant: "destructive" }),
+      });
     };
     reader.readAsDataURL(file);
     if (fileRef.current) fileRef.current.value = "";
   };
 
   const handleRemoveLogo = () => {
-    updateSettings.mutate({ logoUrl: "" });
-    toast({ title: "Logo removida" });
+    updateSettings.mutate({ logoUrl: "" }, {
+      onSuccess: () => toast({ title: "Logo removida" }),
+    });
   };
 
   const handleSaveName = () => {

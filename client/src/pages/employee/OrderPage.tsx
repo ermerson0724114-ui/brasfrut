@@ -20,12 +20,23 @@ export default function OrderPage() {
   const { data: orders = [] } = useQuery<OrderData[]>({ queryKey: ["/api/orders"] });
   const { data: currentCycleData } = useQuery<CurrentCycleData>({ queryKey: ["/api/cycle/current"] });
 
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const cartKey = `brasfrut_cart_${user?.id || 0}`;
+  const [cart, setCartState] = useState<Record<number, number>>(() => {
+    try { const saved = sessionStorage.getItem(cartKey); return saved ? JSON.parse(saved) : {}; } catch { return {}; }
+  });
+  const setCart = (updater: Record<number, number> | ((prev: Record<number, number>) => Record<number, number>)) => {
+    setCartState(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      sessionStorage.setItem(cartKey, JSON.stringify(next));
+      return next;
+    });
+  };
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
   const [submitted, setSubmitted] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [showTerm, setShowTerm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const activeCycle = currentCycleData?.cycle;
   const isOpen = currentCycleData?.isOpen ?? false;
@@ -129,6 +140,7 @@ export default function OrderPage() {
       }
       setSubmitted(true);
       setShowTerm(false);
+      sessionStorage.removeItem(cartKey);
       toast({ title: "Pedido confirmado com sucesso!" });
     } catch {
       toast({ title: "Erro ao salvar pedido", variant: "destructive" });
@@ -137,9 +149,11 @@ export default function OrderPage() {
   };
 
   const handleDelete = async () => {
-    setCart({});
+    setCartState({});
+    sessionStorage.removeItem(cartKey);
     setSubmitted(false);
     setAgreed(false);
+    setShowDeleteConfirm(false);
     if (existingOrder) {
       await updateOrder.mutateAsync({ id: existingOrder.id, data: { items: [], total: "0.00", status: "draft" } });
     }
@@ -169,7 +183,7 @@ export default function OrderPage() {
             <CheckCircle size={16} className="text-green-600" />
             <p className="text-sm font-semibold text-green-800">Pedido confirmado</p>
           </div>
-          <button onClick={handleDelete} className="text-xs text-red-500 font-semibold underline" data-testid="button-delete-order">Excluir</button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="text-xs text-red-500 font-semibold underline" data-testid="button-delete-order">Excluir</button>
         </div>
       )}
 
@@ -337,6 +351,19 @@ export default function OrderPage() {
               >
                 {submitting ? "Confirmando..." : "Confirmar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
+            <h3 className="font-extrabold text-lg mb-2">Excluir pedido?</h3>
+            <p className="text-gray-500 text-sm mb-5">Todos os itens do pedido serão removidos. Deseja continuar?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 border border-gray-200 rounded-2xl font-semibold text-gray-600" data-testid="button-cancel-delete">Cancelar</button>
+              <button onClick={handleDelete} className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold" data-testid="button-confirm-delete">Excluir</button>
             </div>
           </div>
         </div>
