@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Product, Cycle } from "@shared/schema";
+import { MONTHS_FULL } from "@/lib/mockData";
 
 interface OrderItem { id: number; product_id: number; quantity: number; product_name_snapshot: string; group_name_snapshot: string; subgroup_name_snapshot: string | null; unit_price: string; order_id: number; }
 interface OrderData { id: number; employee_id: number; employee_name: string; employee_registration: string | null; status: string; total: string; cycle_id: number; items: OrderItem[]; }
@@ -322,8 +323,10 @@ export default function OrderPage() {
           >
             <h3 className="font-extrabold text-lg mb-3">Termo de Autorização</h3>
             <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-2xl p-4 mb-4">
-              Eu, <strong>{user?.name}</strong>, declaro que li e autorizo a Brasfrut Frutos do Brasil
-              a realizar o desconto na minha folha de pagamento, referente ao valor deste pedido.
+              Eu, <strong>{user?.name}</strong>, autorizo a Brasfrut Frutos do Brasil
+              a realizar o desconto na minha folha de pagamento, no valor de{" "}
+              <strong>R$ {totalValue.toFixed(2).replace(".", ",")}</strong>, referente ao pedido de{" "}
+              <strong>{activeCycle ? `${MONTHS_FULL[activeCycle.month - 1]}/${activeCycle.year}` : ""}</strong>.
             </p>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <input
