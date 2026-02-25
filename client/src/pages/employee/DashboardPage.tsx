@@ -47,12 +47,17 @@ export default function DashboardPage() {
     ? endDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
     : "—";
 
+  const currentYear = new Date().getFullYear();
   const chartData = MONTHS.map((label, i) => {
     const monthOrders = myOrders.filter(o => {
       const cycle = cycles.find(c => c.id === o.cycle_id);
-      return cycle && cycle.month === i + 1;
+      return cycle && cycle.month === i + 1 && cycle.year === currentYear;
     });
-    const total = monthOrders.reduce((s, o) => s + parseFloat(o.total || "0"), 0);
+    const total = monthOrders.reduce((s, o) => {
+      if (selectedGroup === "all") return s + parseFloat(o.total || "0");
+      const groupItems = o.items?.filter(item => item.group_name_snapshot === groups.find(g => String(g.id) === selectedGroup)?.name) || [];
+      return s + groupItems.reduce((sum, item) => sum + parseFloat(item.unit_price) * item.quantity, 0);
+    }, 0);
     return { label, total };
   });
 
@@ -123,7 +128,7 @@ export default function DashboardPage() {
               <Tooltip formatter={(v: any) => `R$ ${parseFloat(v).toFixed(2).replace(".", ",")}`} />
               <Bar dataKey="total" radius={[6, 6, 0, 0]}>
                 {chartData.map((_, i) => (
-                  <Cell key={i} fill={i === chartData.length - 1 ? "#14532d" : "#86efac"} />
+                  <Cell key={i} fill={i === chartData.length - 1 ? "#1e40af" : "#3b82f6"} />
                 ))}
               </Bar>
             </BarChart>

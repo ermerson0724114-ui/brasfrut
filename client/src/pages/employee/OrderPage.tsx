@@ -262,14 +262,28 @@ export default function OrderPage() {
           className="fixed bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white border-t border-gray-100 px-4 pt-3"
           style={{ paddingBottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ShoppingCart size={18} className="text-green-900" />
-              <span className="font-bold text-gray-800">{totalItems} item(s)</span>
+          <div className="space-y-1 mb-2">
+            {groups.map(g => {
+              const groupSubtotal = availableProducts
+                .filter(p => p.group_id === g.id)
+                .reduce((s, p) => s + (cart[p.id] || 0) * parseFloat(p.price), 0);
+              if (groupSubtotal === 0) return null;
+              return (
+                <div key={g.id} className="flex justify-between text-xs" data-testid={`subtotal-group-${g.id}`}>
+                  <span className="text-gray-500">{g.name}</span>
+                  <span className="font-semibold text-gray-700">R$ {groupSubtotal.toFixed(2).replace(".", ",")}</span>
+                </div>
+              );
+            })}
+            <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={18} className="text-green-900" />
+                <span className="font-bold text-gray-800">{totalItems} item(s)</span>
+              </div>
+              <span className="font-extrabold text-green-900 text-lg" data-testid="text-order-total">
+                R$ {totalValue.toFixed(2).replace(".", ",")}
+              </span>
             </div>
-            <span className="font-extrabold text-green-900 text-lg">
-              R$ {totalValue.toFixed(2).replace(".", ",")}
-            </span>
           </div>
           {isClosed ? (
             <p className="text-center text-sm text-red-500 font-semibold py-2">Período fechado (dia 1 a 14). Aguarde o dia 15 para confirmar pedidos.</p>

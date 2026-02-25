@@ -43,8 +43,15 @@ export default function AdminDashboard() {
       const cycle = cycles.find(c => c.id === o.cycle_id);
       return cycle && cycle.month === i + 1 && cycle.year === selectedYear;
     });
-    const valor = monthOrders.reduce((s, o) => s + parseFloat(o.total || "0"), 0);
-    const funcionarios = new Set(monthOrders.map(o => o.employee_id)).size;
+    const valor = monthOrders.reduce((s, o) => {
+      if (selectedGroup === "all") return s + parseFloat(o.total || "0");
+      const groupName = groups.find(g => String(g.id) === selectedGroup)?.name;
+      const groupItems = o.items?.filter(item => item.group_name_snapshot === groupName) || [];
+      return s + groupItems.reduce((sum, item) => sum + parseFloat(item.unit_price) * item.quantity, 0);
+    }, 0);
+    const funcionarios = selectedGroup === "all"
+      ? new Set(monthOrders.map(o => o.employee_id)).size
+      : new Set(monthOrders.filter(o => o.items?.some(item => item.group_name_snapshot === groups.find(g => String(g.id) === selectedGroup)?.name)).map(o => o.employee_id)).size;
     return { label, valor, funcionarios };
   });
 
@@ -92,7 +99,7 @@ export default function AdminDashboard() {
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
               <Tooltip />
               <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="left" dataKey="valor" name="Valor (R$)" fill="#86efac" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="left" dataKey="valor" name="Valor (R$)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               <Line yAxisId="right" type="monotone" dataKey="funcionarios" name="Funcionários" stroke="#14532d" strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
